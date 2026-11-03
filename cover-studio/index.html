@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>封面工坊 Cover Studio</title>
+  <!--
+    字体：Noto Sans SC（Google Fonts CDN，SIL Open Font License）
+    可商用。用户后续可自行上传商用字体文件并在模板 fontFamily 中引用。
+    请勿使用未获授权的字体文件。
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=1.1" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>封面工坊</h1>
+        <span class="tag">v1.1</span>
+      </div>
+      <div class="size-picker">
+        <label for="sizeSelect">尺寸 / 平台</label>
+        <select id="sizeSelect" aria-label="选择封面尺寸"></select>
+        <span class="size-meta" id="sizeMeta"></span>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="btn btn-sm" id="btnExportOne">导出 PNG</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btnExportZip">批量导出 ZIP</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- 左：模板库 / 生成 / 参考图 -->
+      <aside class="panel" aria-label="模板与生成">
+        <div class="panel-tabs" role="tablist">
+          <button type="button" class="active" data-tab="library" role="tab">模板库</button>
+          <button type="button" data-tab="generate" role="tab">从描述生成</button>
+          <button type="button" data-tab="reference" role="tab">参考图解析</button>
+        </div>
+        <div class="panel-body">
+          <div class="tab-pane active" id="tab-library">
+            <p class="section-title">内置 + 自定义模板</p>
+            <div class="template-list" id="templateList"></div>
+          </div>
+
+          <div class="tab-pane" id="tab-generate">
+            <p class="section-title">用一句话生成新版式</p>
+            <div class="field">
+              <label for="descInput">中文描述</label>
+              <textarea id="descInput" placeholder="例如：清爽的健身类封面&#10;或：暗色科技感 AI 工具推荐"></textarea>
+              <p class="hint">v1 为关键词规则引擎（稳定可复现）。后续可接视觉/LLM 解析。</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-block" id="btnGenerate">生成并加入模板库</button>
+            <div class="gen-result" id="genResult"></div>
+          </div>
+
+          <div class="tab-pane" id="tab-reference">
+            <p class="section-title">参考图解析（v1.1 启发式）</p>
+            <div class="hint todo">
+              <strong>诚实说明：不是 ML / 视觉模型。</strong><br />
+              v1.1 仅根据<strong>宽高比</strong> + 可选的<strong>上下亮度抽样</strong>，猜测更接近哪套内置模板，或由你手动「套用最接近模板」。不会识别文字、贴纸位置或真实图层结构。
+            </div>
+            <label class="upload-zone" id="refUploadZone" style="margin-top:12px;display:block;">
+              <div class="icon">🖼</div>
+              <div>点击或拖拽上传参考封面</div>
+              <div class="hint" style="margin-top:6px;">支持 JPG / PNG · 仅本地预览，不上传服务器</div>
+              <input type="file" id="refFileInput" accept="image/*" />
+            </label>
+            <div class="btn-row" style="margin-top:10px;">
+              <button type="button" class="btn btn-sm" id="btnRefSamplePov" title="加载内置参考图">示例：POV贴纸问答</button>
+              <button type="button" class="btn btn-sm" id="btnRefSamplePortrait" title="加载内置参考图">示例：人像双行钩子</button>
+            </div>
+            <img id="refPreview" class="ref-preview" alt="参考图预览" />
+            <div id="refParsePanel" class="ref-parse-panel" hidden>
+              <p class="section-title">启发式结果</p>
+              <div id="refParseMeta" class="ref-parse-meta"></div>
+              <p class="section-title" style="margin-top:10px;">套用最接近模板</p>
+              <div class="ref-template-picks" id="refTemplatePicks"></div>
+              <button type="button" class="btn btn-primary btn-block" id="btnApplyRefParse" style="margin-top:10px;">套用建议模板 + 示例文案 + 此图作背景</button>
+            </div>
+            <p class="hint" id="refStatus" style="margin-top:10px;"></p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 中：预览 + 轻量编辑 -->
+      <section class="preview-panel" aria-label="预览">
+        <div class="preview-toolbar">
+          <h2>实时预览</h2>
+          <div class="btn-row" style="margin:0;">
+            <button type="button" class="btn btn-sm" id="btnResetSample">恢复示例文案</button>
+          </div>
+        </div>
+        <div class="preview-stage">
+          <canvas id="previewCanvas" width="1080" height="1440" aria-label="封面画布"></canvas>
+        </div>
+
+        <div class="editor-block">
+          <h3>文案与颜色（轻量编辑）</h3>
+          <div class="field">
+            <label for="fieldTitle">标题 title</label>
+            <input type="text" id="fieldTitle" placeholder="主标题" />
+          </div>
+          <div class="field">
+            <label for="fieldSubtitle">副标题 subtitle</label>
+            <input type="text" id="fieldSubtitle" placeholder="副标题" />
+          </div>
+          <div class="field">
+            <label for="fieldBadge">标签 badge</label>
+            <input type="text" id="fieldBadge" placeholder="可选标签" />
+          </div>
+          <div class="field">
+            <label for="fieldTagline">补充 tagline</label>
+            <input type="text" id="fieldTagline" placeholder="可选补充说明" />
+          </div>
+          <div class="field">
+            <label for="fieldImage">背景图 URL / bgImage（可选）</label>
+            <input type="url" id="fieldImage" placeholder="https://… 或本地 blob · 绑定 image / bgImage" />
+          </div>
+          <div class="field">
+            <label for="fieldSticker">贴纸图 URL / stickerImage（可选）</label>
+            <input type="url" id="fieldSticker" placeholder="POV 模板左下贴纸槽" />
+          </div>
+          <div class="field">
+            <label>背景主色（若为纯色背景）</label>
+            <div class="color-row">
+              <input type="text" id="fieldBgColorText" placeholder="#F0F7F4" />
+              <input type="color" id="fieldBgColor" value="#F0F7F4" />
+            </div>
+          </div>
+          <p class="section-title" style="margin-top:8px;">图层显隐</p>
+          <div class="layer-list" id="layerList"></div>
+        </div>
+      </section>
+
+      <!-- 右：批量 -->
+      <aside class="panel right" aria-label="批量生成">
+        <div class="panel-tabs">
+          <button type="button" class="active" style="pointer-events:none;">批量生成</button>
+        </div>
+        <div class="panel-body">
+          <p class="section-title">粘贴表格 / CSV / TSV</p>
+          <p class="hint">首行可为表头。列：title, subtitle, badge, image（或 image_url）。也可用 Tab / 逗号分隔；或每行一句标题。</p>
+          <textarea class="batch-textarea" id="batchInput" placeholder="title,subtitle,badge,image&#10;30天居家训练,无需器械,健身,&#10;秋日穿搭灵感,Minimal Style,时尚,&#10;AI 工具清单,效率翻倍,科技,"></textarea>
+          <div class="btn-row">
+            <button type="button" class="btn btn-sm btn-primary" id="btnParseBatch">解析预览</button>
+            <button type="button" class="btn btn-sm" id="btnLoadSampleBatch">填入示例</button>
+          </div>
+          <p class="section-title" style="margin-top:14px;">预览列表（点击可应用到画布）</p>
+          <div class="batch-list" id="batchList"></div>
+          <div class="btn-row" style="margin-top:12px;">
+            <button type="button" class="btn btn-primary btn-block" id="btnExportZip2">一键导出全部 PNG（ZIP）</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="status-bar">
+      <span id="statusText">就绪</span>
+      <span>字体：Noto Sans SC（OFL 可商用）· 渲染：Canvas 2D 确定性</span>
+    </footer>
+  </div>
+
+  <!-- JSZip CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="sizes.js?v=1.1"></script>
+  <script src="templates.js?v=1.1"></script>
+  <script src="renderer.js?v=1.1"></script>
+  <script src="generator.js?v=1.1"></script>
+  <script src="app.js?v=1.1"></script>
+</body>
+</html>
