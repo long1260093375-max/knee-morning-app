@@ -1,14 +1,16 @@
 const V={
- warm:{bv:'BV1ey4y1N7Ju',t:'运动前膝盖这样热身才是正确的'},
- wall:{bv:'BV1PxAoePEhE',t:'正确靠墙静蹲养护膝盖'},
- bridge:{bv:'BV1Jg4y1z7Nm',t:'如何做一个标准的臀桥？不伤腰/保姆级'},
- side:{bv:'BV18eYJ64EeE',t:'臀中肌侧卧抬腿训练'},
- slr:{bv:'BV1fQ4y1o7A2',t:'术后康复经典练习之，直腿抬高，你真的会做吗？'},
- calf:{bv:'BV1ZLuxz6Eyk',t:'提踵训练，对足踝力量很重要'},
- stretch:{bv:'BV1og4y1x7yk',t:'运动后舒缓拉伸·膝盖养护'},
- walk:{bv:'BV133411J7NT',t:'健步走的正确姿势'},
- follow:{bv:'BV1GS4y197g2',t:'MIZI 30分钟膝盖友好型全身有氧（无深蹲·无弓步·无跳跃）'},
- followWalk:{bv:'BV1RP8iznE7c',t:'MIZI 燃脂健走30分钟（无跳跃、无深蹲、无弓步）'}
+ warm:{bv:'BV1df8yz1ETM',t:'MIZI 活力唤醒 6分钟全身热身｜无跳跃'},
+ wall:{bv:'BV1YP41137k1',t:'樂樂健身 5分钟靠墙静蹲跟练'},
+ bridge:{bv:'BV1kL411J7Zk',t:'帕梅拉 10分钟泵感臀桥｜无深蹲跳跃'},
+ side:{bv:'BV1tw411C75X',t:'20分钟臀中肌强化跟练'},
+ slr:{bv:'BV1emhB6CENf',t:'坐位直腿抬高跟练（股四头肌）'},
+ calf:{bv:'BV1iy2rB4EkK',t:'提踵训练跟练'},
+ stretch:{bv:'BV1pUbQzkEje',t:'MIZI 10分钟全身站立拉伸'},
+ walk:{bv:'BV1RP8iznE7c',t:'MIZI 燃脂健走 30分钟｜无跳跃无深蹲'},
+ follow:{bv:'BV1GS4y197g2',t:'MIZI 30分钟膝盖友好全身有氧｜有音乐可跟练'},
+ followWalk:{bv:'BV1RP8iznE7c',t:'MIZI 燃脂健走 30分钟｜有音乐可跟练'},
+ ellipse:{bv:'BV1G9ABewE19',t:'15分钟椭圆机跟练'},
+ weekendSwim:{bv:'BV1TPkrY6Eg4',t:'15分钟游泳陆地训练跟练'}
 };
 const S=q=>({q});
 const WARM=[
@@ -25,10 +27,10 @@ const STR=[
  {n:'拉伸：大腿前/后侧、小腿',rx:'各 30 秒',tp:'温和拉到有牵拉感就停，不弹振、正常呼吸',v:'stretch'}];
 const CARDIO=[
  {n:'平地快走',rx:'20–30 分钟',tp:'强度：能说话但唱不了歌。选平路，避开连续爬楼、长下坡',v:'walk'},
- {n:'或：固定自行车 / 椭圆机',rx:'20–30 分钟',tp:'座椅调到踩到底膝盖微弯；阻力轻一点，同样能说话不能唱歌',s:'固定自行车 膝盖 调座椅'},
+ {n:'或：固定自行车 / 椭圆机',rx:'20–30 分钟',tp:'座椅调到踩到底膝盖微弯；阻力轻一点，同样能说话不能唱歌',v:'ellipse'},
  {n:'拉伸：大腿前/后侧、小腿',rx:'各 30 秒',tp:'走完趁热拉一拉',v:'stretch'}];
 const WEEKEND=[
- {n:'完全休息日 或 轻活动日',rx:'二选一：一天全休，另一天轻活动',tp:'今天想动就：游泳 或 慢散步 30 分钟。不跑不跳～',s:'游泳 膝盖 自由泳 入门'},
+ {n:'完全休息日 或 轻活动日',rx:'二选一：一天全休，另一天轻活动',tp:'今天想动就：游泳 或 慢散步 30 分钟。不跑不跳～',v:'weekendSwim'},
  {n:'慢散步',rx:'30 分钟',tp:'晒晒太阳，放松走',v:'walk'}];
 const DAYS=['日','一','二','三','四','五','六'];
 function plan(d){if(d==0||d==6)return{t:'周末放松日 🌿',sub:'休息也是训练的一部分',sec:[['今天',WEEKEND]]};
@@ -47,7 +49,7 @@ function render(){const p=plan(sel);const h=today.getHours();
   html+=`<div class="card ex"><div class="n">${k}</div><div class="b"><div class="nm">${e.n}</div><div class="rx">${e.rx}</div><div class="tp">${e.tp}</div></div>
   <div style="display:flex;flex-direction:column;gap:8px;align-items:center">${e.v?`<button class="vbtn" data-v="${e.v}">▶ 视频</button>`:`<button class="vbtn s" data-s="${e.s}">🔍 B站搜</button>`}
   ${sel==today.getDay()?`<input type="checkbox" data-k="${id}" ${st[id]?'checked':''}>`:''}</div></div>`;});});
- if(p.follow)html+=`<div class="card follow"><h3>🎬 想跟着视频一起练？</h3><div class="tp">${V[p.follow].t}</div><button class="vbtn" data-v="${p.follow}">▶ 跟练整套</button></div>`;
+ if(p.follow)html+=`<div class="card follow"><h3>🎵 推荐：跟着音乐整套练</h3><div class="tp">${V[p.follow].t}</div><button class="vbtn" data-v="${p.follow}">▶ 立刻跟练</button></div>`;
  $('plan').innerHTML=html;
  const d=$('done');d.style.display=sel==today.getDay()?'block':'none';d.className='done'+(L[tk].done?' ok':'');d.textContent=L[tk].done?'🎉 今天已打卡，真棒！（再点取消）':'✅ 今天练完啦，打卡！';
  const ws=new Date(today);ws.setDate(today.getDate()-((today.getDay()+6)%7));let s='',streak=0;
