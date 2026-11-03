@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ff9f5a"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="护膝晨练">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png"><link rel="stylesheet" href="style.css"><title>早安护膝操</title></head>
+<body><header><div class="hi" id="hi"></div><h1 id="title"></h1><div class="sub" id="sub"></div>
+<div class="streak" id="streak"></div></header>
+<main><section class="card knee"><h3>今天膝盖感觉怎么样？</h3><div class="seg" id="knee">
+<button data-v="ok">😊 正常</button><button data-v="sore">😐 有点酸</button><button data-v="swollen">🧊 肿胀</button></div><div id="kneeTip" class="tip"></div></section>
+<nav class="days" id="days"></nav><div id="plan"></div>
+<button class="done" id="done">✅ 今天练完啦，打卡！</button>
+<section class="card rules"><h3>🛡️ 护膝小规则</h3><ul>
+<li>热身要做够，别省这5分钟</li><li>疼痛超过 3/10，或练后肿胀发热 → 当天停</li>
+<li>每周加量别超过约 10%</li><li>穿缓震好的运动鞋</li>
+<li>再出现明显肿胀、打软、卡住或夜间痛 → 先去看骨科/康复科</li></ul>
+<p class="disc">⚠️ 本页仅供日常锻炼参考，不是医疗建议。视频来自B站各UP主，动作以自身感受和医生/康复师意见为准。</p></section>
+</main>
+<div class="modal" id="modal"><div class="mbox"><div class="mhead"><b id="mtitle"></b><button id="mclose">✕</button></div>
+<div class="vwrap" id="vwrap"></div><a id="mlink" target="_blank" rel="noopener" class="openbili">在B站App/网页打开 ↗</a></div></div>
+<script src="app.js"></script></body></html>
