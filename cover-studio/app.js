@@ -16,7 +16,10 @@
       image: '',
       bgImage: '',
       stickerImage: '',
+      person: '',
+      personTransform: { dx: 0, dy: 0, scale: 1 },
     },
+    person: { src: '', key: '', name: '', job: 0 },
     ref: {
       objectUrl: null,
       fileName: '',
@@ -293,7 +296,14 @@
         image: row.image || row.image_url || row.bgImage || '',
         bgImage: row.bgImage || row.image || row.image_url || '',
         stickerImage: row.stickerImage || row.sticker || '',
+        person: state.data.person,
+        personTransform: state.data.personTransform,
       };
+      if (row.personSrc) {
+        setStatus(`正在处理第 ${i + 1}/${list.length} 张人物图…`);
+        data.person = await personUrlFor(row.personSrc, row.personKey, row.personName);
+        data.personTransform = { dx: 0, dy: 0, scale: 1 };
+      }
       const blob = await CoverRenderer.toPngBlob(template, size, data);
       const name = `${String(i + 1).padStart(2, '0')}_${safeFilename(data.title || 'cover')}.png`;
       zip.file(name, blob);
@@ -418,7 +428,7 @@
           <span class="idx">${i + 1}</span>
           <div>
             <div class="title">${escapeHtml(row.title || '(无标题)')}</div>
-            <div class="sub">${escapeHtml([row.subtitle, row.badge].filter(Boolean).join(' · '))}</div>
+            <div class="sub">${escapeHtml([row.subtitle, row.badge, row.personName ? '人物:' + row.personName : ''].filter(Boolean).join(' · '))}</div>
           </div>
         </div>`;
       })
@@ -444,7 +454,9 @@
       $('#fieldImage').value = row.image || row.image_url || '';
     }
     renderBatchList();
-    scheduleRender();
+    if (row.personSrc) {
+      setPersonSource(row.personSrc, row.personKey, row.personName);
+    } else scheduleRender();
     setStatus(`已应用第 ${idx + 1} 行到预览`);
   }
 
@@ -808,6 +820,7 @@
 
     $('#btnParseBatch').addEventListener('click', () => {
       state.batchRows = parseBatchText($('#batchInput').value);
+      attachBatchPersons();
       state.batchActive = -1;
       renderBatchList();
       setStatus(`已解析 ${state.batchRows.length} 行`, 'ok');
@@ -821,10 +834,150 @@
         'AI 工具效率翻倍,2026 必备清单,科技,',
       ].join('\n');
       state.batchRows = parseBatchText($('#batchInput').value);
+      attachBatchPersons();
       state.batchActive = -1;
       renderBatchList();
       setStatus('已填入 3 行示例', 'ok');
     });
+  }
+
+  /* —— 人物照片 / 自动抠图 —— */
+  function personHint(msg, cls) {
+    const el = $('#personHint');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'hint' + (cls ? ' ' + cls : '');
+  }
+  function fileKey(f) {
+    return `${f.name}|${f.size}|${f.lastModified}`;
+  }
+  /** 返回人物层应使用的 URL：开抠图则抠图结果，失败回退原图 */
+  async function personUrlFor(src, key, name) {
+    if (!$('#personCutout').checked || !window.CoverSegment) return src;
+    try {
+      return await CoverSegment.cutout(src, key, Number($('#personFeather').value));
+    } catch (err) {
+      console.warn('抠图失败', err);
+      const msg = (err && err.message) || '';
+      const why = /fetch|import|load|network|wasm/i.test(msg) ? '模型加载失败' : msg || '未知错误';
+      personHint(`抠图失败（${why}），已使用原图`, 'err');
+      return src;
+    }
+  }
+  async function refreshPerson() {
+    const p = state.person;
+    if (!p.src) {
+      state.data.person = '';
+      scheduleRender();
+      return;
+    }
+    const job = ++p.job;
+    // 先显示原图，避免空白
+    if (!state.data.person) state.data.person = p.src;
+    if ($('#personCutout').checked) personHint('正在抠图…（首次需加载模型，请稍候）', 'busy');
+    scheduleRender();
+    const url = await personUrlFor(p.src, p.key, p.name);
+    if (job !== p.job) return;
+    state.data.person = url;
+    if (url !== p.src) {
+      const info = CoverSegment.info();
+      personHint(`已抠图 · ${info ? info.name : ''}（拖动预览可调整位置，滚轮缩放）`);
+    } else if (!$('#personCutout').checked) {
+      personHint('已使用原图（抠图已关闭）');
+    }
+    scheduleRender();
+  }
+  function setPersonSource(src, key, name) {
+    state.person.src = src;
+    state.person.key = key || src;
+    state.person.name = name || '';
+    state.data.person = '';
+    refreshPerson();
+  }
+  function setPersonScale(v) {
+    const t = state.data.personTransform;
+    t.scale = Math.max(0.3, Math.min(2.5, v));
+    $('#personScale').value = t.scale;
+    scheduleRender();
+  }
+  function attachBatchPersons() {
+    const files = state.batchFiles || [];
+    state.batchRows.forEach((row, i) => {
+      const f = files[i];
+      if (f) {
+        row.personSrc = f.url;
+        row.personKey = f.key;
+        row.personName = f.name;
+      }
+    });
+  }
+  function initPerson() {
+    if (!$('#personFile')) return;
+    $('#personFile').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      if (!f.type.startsWith('image/')) {
+        personHint('请选择图片文件', 'err');
+        return;
+      }
+      state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
+      $('#personScale').value = 1;
+      setPersonSource(URL.createObjectURL(f), fileKey(f), f.name);
+    });
+    $('#personCutout').addEventListener('change', () => {
+      state.data.person = '';
+      refreshPerson();
+    });
+    $('#personFeather').addEventListener('change', refreshPerson);
+    $('#personScale').addEventListener('input', (e) => setPersonScale(Number(e.target.value)));
+    $('#personReset').addEventListener('click', () => {
+      state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
+      $('#personScale').value = 1;
+      scheduleRender();
+    });
+    $('#personClear').addEventListener('click', () => {
+      state.person.src = '';
+      state.person.job++;
+      $('#personFile').value = '';
+      personHint('上传人像后自动去背景（本地处理，不上传）。');
+      refreshPerson();
+    });
+    $('#batchPersonFiles').addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || [])
+        .filter((f) => f.type.startsWith('image/'))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
+      state.batchFiles = files.map((f) => ({ url: URL.createObjectURL(f), key: fileKey(f), name: f.name }));
+      attachBatchPersons();
+      renderBatchList();
+      setStatus(`已载入 ${files.length} 张人物照片（按文件名顺序对应各行）`, 'ok');
+    });
+
+    // 预览拖动 / 滚轮缩放
+    const cv = $('#previewCanvas');
+    let drag = null;
+    cv.addEventListener('pointerdown', (e) => {
+      if (!state.data.person) return;
+      const r = cv.getBoundingClientRect();
+      const t = state.data.personTransform;
+      drag = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, dx: t.dx, dy: t.dy };
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', (e) => {
+      cv.classList.toggle('person-drag', !!state.data.person);
+      if (!drag) return;
+      const t = state.data.personTransform;
+      t.dx = drag.dx + ((e.clientX - drag.x) / drag.w) * 100;
+      t.dy = drag.dy + ((e.clientY - drag.y) / drag.h) * 100;
+      scheduleRender();
+    });
+    const end = () => { drag = null; };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', end);
+    cv.addEventListener('wheel', (e) => {
+      if (!state.data.person) return;
+      e.preventDefault();
+      setPersonScale(state.data.personTransform.scale * (e.deltaY < 0 ? 1.05 : 0.95));
+    }, { passive: false });
   }
 
   function escapeHtml(s) {
@@ -840,6 +993,7 @@
     initSizeSelect();
     initTabs();
     initFields();
+    initPerson();
     initReferenceStub();
     refreshTemplateList();
     selectTemplate(state.templateId);

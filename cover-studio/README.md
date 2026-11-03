@@ -138,3 +138,39 @@ cover-studio/
 ---
 
 自用优先，无登录。导出即最终封面；预览与导出共用同一渲染路径，保证所见即所得。
+
+## 人物照片自动抠图（v1.2）
+
+- 位置：左侧「内容」区 →「人物照片（自动抠图）」。上传人像后**默认自动去背景**，透明人物层自动放进封面（模板若有 `binding: "person"` 的图片图层则放入该槽，否则放在默认人物槽：画布右侧、底部对齐、contain 缩放，位于文字层下方）。
+- 「抠图」开关：关闭即用原图。抠图失败（模型加载失败、没检测到人物等）会自动回退原图，并在下方显示一行中文提示，不影响其它功能。
+- 「收边」滑条：0～6，数值越大边缘越柔和（羽化）。「缩放」滑条 / 预览图上滚轮：缩放人物；在预览图上**拖动**可移动人物；「复位」恢复默认位置，「移除」去掉人物。
+- 缓存：同一张图（按 文件名+大小+修改时间）只算一次分割，调整收边只重新合成，不重复推理。
+- 批量：右侧批量区可一次选多张「人物照片」，按文件名（自然排序，如 01.jpg、02.jpg…）依次对应第 1、2、3… 行；导出 ZIP 时每行自动抠图并使用默认位置。没有对应照片的行使用左侧当前人物（含你拖动后的位置）。
+- 导出 PNG：人物层以透明 PNG 合成到画布，与其它图层正确叠加。
+
+### 技术与依赖（v1.3 起随站自托管）
+
+- 库：MediaPipe Tasks Vision `@mediapipe/tasks-vision@0.10.14` 的 `ImageSegmenter`（Apache-2.0），未使用任何 AGPL 库。
+- **所有抠图依赖都放在 `vendor/` 目录，随站点一起发布，用相对路径加载，不依赖外网**（国内可用）。照片全程在浏览器本地处理，不上传。
+- 加载顺序：本地 `vendor/` → 本地失败才回退 CDN（jsdelivr + storage.googleapis.com）→ 再失败则回退原图并提示。
+- `vendor/` 内容（合计约 35MB）：
+
+| 路径 | 大小 | 说明 |
+|---|---|---|
+| `vendor/mediapipe/vision_bundle.mjs` | 134KB | JS 运行库 |
+| `vendor/mediapipe/wasm/vision_wasm_internal.{js,wasm}` | 0.2MB + 9.0MB | WASM（SIMD） |
+| `vendor/mediapipe/wasm/vision_wasm_nosimd_internal.{js,wasm}` | 0.2MB + 8.9MB | WASM（旧浏览器无 SIMD 时用） |
+| `vendor/mediapipe/models/selfie_multiclass_256x256.tflite` | 15.6MB | 主模型（float32） |
+| `vendor/mediapipe/models/selfie_segmenter.tflite` | 0.24MB | 备用模型（float16） |
+| `vendor/mediapipe/LICENSE`、`NOTICE` | — | Apache-2.0 许可与来源说明 |
+| `vendor/jszip/jszip.min.js`、`LICENSE.markdown` | 95KB | JSZip 3.10.1（选用 MIT 授权），本地优先，失败回退 CDN |
+
+- 用户实际只下载一套 WASM（约 9MB）+ 主模型（约 16MB），首次抠图需从本站加载约 25MB，之后浏览器缓存。单文件均远小于 GitHub 的 100MB 限制。
+- 仍为外链的只有 Google Fonts 字体（打不开时自动用系统字体，不影响功能）。
+- 代码：`segment.js`（抠图与缓存）、`renderer.js`（人物层注入、contain/底部对齐、位移缩放）、`app.js`（界面与批量接入）。
+
+### 已知局限
+
+- 头发丝、半透明发梢、飘散碎发边缘较硬或略有残留；复杂背景、与背景颜色接近的衣服/头发可能被误切。
+- 照片里已有的文字/贴纸若压在人物身上会被一起保留。
+- 多人照片会把所有人一起抠出；非人像（宠物、物品）基本无法识别。

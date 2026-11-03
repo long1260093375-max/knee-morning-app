@@ -663,3 +663,11 @@ button, input, select, textarea {
   border-radius: 999px;
   padding: 1px 6px;
 }
+
+/* 人物抠图 */
+.person-opts { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin-top:6px; font-size:12px; }
+.person-opts .inline { display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:normal; }
+.person-opts input[type=range] { width:72px; }
+#personHint.busy { color:#2563eb; }
+#personHint.err { color:#dc2626; }
+#previewCanvas.person-drag { cursor: move; }

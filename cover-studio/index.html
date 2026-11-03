@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=1.1" />
+  <link rel="stylesheet" href="style.css?v=1.3" />
 </head>
 <body>
   <div id="app">
@@ -124,6 +124,18 @@
             <label for="fieldSticker">贴纸图 URL / stickerImage（可选）</label>
             <input type="url" id="fieldSticker" placeholder="POV 模板左下贴纸槽" />
           </div>
+          <div class="field person-field">
+            <label for="personFile">人物照片（自动抠图）</label>
+            <input type="file" id="personFile" accept="image/*" />
+            <div class="person-opts">
+              <label class="inline"><input type="checkbox" id="personCutout" checked /> 抠图</label>
+              <label class="inline">收边 <input type="range" id="personFeather" min="0" max="6" step="1" value="1" /></label>
+              <label class="inline">缩放 <input type="range" id="personScale" min="0.4" max="2" step="0.05" value="1" /></label>
+              <button type="button" class="btn btn-sm" id="personReset">复位</button>
+              <button type="button" class="btn btn-sm" id="personClear">移除</button>
+            </div>
+            <p class="hint" id="personHint">上传人像后自动去背景（本地处理，不上传）。可在预览图上拖动人物、滚轮缩放。</p>
+          </div>
           <div class="field">
             <label>背景主色（若为纯色背景）</label>
             <div class="color-row">
@@ -145,6 +157,8 @@
           <p class="section-title">粘贴表格 / CSV / TSV</p>
           <p class="hint">首行可为表头。列：title, subtitle, badge, image（或 image_url）。也可用 Tab / 逗号分隔；或每行一句标题。</p>
           <textarea class="batch-textarea" id="batchInput" placeholder="title,subtitle,badge,image&#10;30天居家训练,无需器械,健身,&#10;秋日穿搭灵感,Minimal Style,时尚,&#10;AI 工具清单,效率翻倍,科技,"></textarea>
+          <label for="batchPersonFiles" class="hint" style="display:block;margin-top:8px;">人物照片（可多选，按文件名排序后依次对应第 1、2、3… 行；没有对应照片的行用左侧当前人物）</label>
+          <input type="file" id="batchPersonFiles" accept="image/*" multiple />
           <div class="btn-row">
             <button type="button" class="btn btn-sm btn-primary" id="btnParseBatch">解析预览</button>
             <button type="button" class="btn btn-sm" id="btnLoadSampleBatch">填入示例</button>
@@ -165,11 +179,13 @@
   </div>
 
   <!-- JSZip CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="sizes.js?v=1.1"></script>
-  <script src="templates.js?v=1.1"></script>
-  <script src="renderer.js?v=1.1"></script>
-  <script src="generator.js?v=1.1"></script>
-  <script src="app.js?v=1.1"></script>
+  <script src="vendor/jszip/jszip.min.js?v=1.3"></script>
+  <script>window.JSZip || document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>')</script>
+  <script src="sizes.js?v=1.3"></script>
+  <script src="templates.js?v=1.3"></script>
+  <script src="renderer.js?v=1.3"></script>
+  <script src="generator.js?v=1.3"></script>
+  <script src="segment.js?v=1.3"></script>
+  <script src="app.js?v=1.3"></script>
 </body>
 </html>

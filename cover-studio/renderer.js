@@ -194,6 +194,7 @@ window.CoverRenderer = (function () {
       ctx.clip();
     }
 
+    if (!img && (layer.binding === 'person' || layer._hidePlaceholder)) { ctx.restore(); return; }
     if (img) {
       const iw = img.naturalWidth || img.width;
       const ih = img.naturalHeight || img.height;
@@ -206,11 +207,12 @@ window.CoverRenderer = (function () {
         const dy = y + (h - dh) / 2;
         ctx.drawImage(img, dx, dy, dw, dh);
       } else if (fit === 'contain') {
-        const scale = Math.min(w / iw, h / ih);
+        const t = layer._transform || { dx: 0, dy: 0, scale: 1 };
+        const scale = Math.min(w / iw, h / ih) * (t.scale || 1);
         const dw = iw * scale;
         const dh = ih * scale;
-        const dx = x + (w - dw) / 2;
-        const dy = y + (h - dh) / 2;
+        const dx = x + (w - dw) / 2 + pct(t.dx || 0, W);
+        const dy = (layer.align === 'bottom' ? y + h - dh : y + (h - dh) / 2) + pct(t.dy || 0, H);
         ctx.drawImage(img, dx, dy, dw, dh);
       } else {
         ctx.drawImage(img, x, y, w, h);
@@ -425,6 +427,32 @@ window.CoverRenderer = (function () {
     }
   }
 
+  /** 人物层：模板含 binding=person 的图层则使用；否则在首个文字层之前注入默认人物槽 */
+  const DEFAULT_PERSON = {
+    id: 'person-auto', type: 'image', binding: 'person', visible: true,
+    x: 38, y: 18, w: 62, h: 82, fit: 'contain', align: 'bottom', radius: 0,
+  };
+  function withPersonLayer(layers, data) {
+    if (!data.person) return layers;
+    const tf = data.personTransform || null;
+    let found = false;
+    const out = layers.map((l) => {
+      if (l.binding !== 'person') return l;
+      found = true;
+      return { ...l, fit: l.fit || 'contain', align: l.align || 'bottom', _transform: tf };
+    });
+    // 有人物时，空的其它图片槽不再画"图片"占位块
+    out.forEach((l, i) => {
+      if (l.type === 'image' && l.binding !== 'person' && !resolveImageUrl(l, data)) out[i] = { ...l, _hidePlaceholder: true };
+    });
+    if (found) return out;
+    const idx = out.findIndex((l) => l.type === 'text' || l.type === 'badge');
+    const pl = { ...DEFAULT_PERSON, _transform: tf };
+    if (idx < 0) out.push(pl);
+    else out.splice(idx, 0, pl);
+    return out;
+  }
+
   /**
    * 渲染模板到 canvas
    * @param {HTMLCanvasElement} canvas
@@ -440,7 +468,7 @@ window.CoverRenderer = (function () {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    const layers = template.layers || [];
+    const layers = withPersonLayer(template.layers || [], data);
     const imageUrls = {};
     for (const layer of layers) {
       if (layer.type === 'image' && layer.visible !== false) {

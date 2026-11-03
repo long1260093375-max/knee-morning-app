@@ -1,0 +1,9 @@
+Vendored third-party files (unmodified except removal of a sourceMappingURL comment in vision_bundle.mjs):
+
+- @mediapipe/tasks-vision 0.10.14 (vision_bundle.mjs, wasm/*)
+  Copyright The MediaPipe Authors / Google LLC. Licensed under the Apache License 2.0 (see LICENSE).
+  Source: https://www.npmjs.com/package/@mediapipe/tasks-vision
+- Models selfie_multiclass_256x256 (float32) and selfie_segmenter (float16)
+  From https://storage.googleapis.com/mediapipe-models/image_segmenter/
+  MediaPipe models by Google, distributed under the Apache License 2.0
+  (see model cards at https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter).
