@@ -9,17 +9,15 @@
     可商用。用户后续可自行上传商用字体文件并在模板 fontFamily 中引用。
     请勿使用未获授权的字体文件。
   -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=1.3" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css?v=2.0" />
+  <link rel="stylesheet" href="style.css?v=2.0" />
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div class="brand">
         <h1>封面工坊</h1>
-        <span class="tag">v1.1</span>
+        <span class="tag">v2.0</span>
       </div>
       <div class="size-picker">
         <label for="sizeSelect">尺寸 / 平台</label>
@@ -28,6 +26,8 @@
       </div>
       <div class="top-actions">
         <button type="button" class="btn btn-sm" id="btnExportOne">导出 PNG</button>
+        <label class="inline guide-toggle" title="只在预览显示，导出不带"><input type="checkbox" id="guideToggle" /> 安全区参考线</label>
+        <button type="button" class="btn btn-sm" id="btnExportMulti" title="小红书3:4 + 抖音9:16 + B站16:9 + 方图1:1">多平台 ZIP</button>
         <button type="button" class="btn btn-sm btn-primary" id="btnExportZip">批量导出 ZIP</button>
       </div>
     </header>
@@ -42,7 +42,8 @@
         </div>
         <div class="panel-body">
           <div class="tab-pane active" id="tab-library">
-            <p class="section-title">内置 + 自定义模板</p>
+            <p class="section-title">模板库 <span class="tpl-count" id="tplCount"></span></p>
+            <div class="tpl-filters" id="tplFilters"></div>
             <div class="template-list" id="templateList"></div>
           </div>
 
@@ -102,11 +103,13 @@
           <h3>文案与颜色（轻量编辑）</h3>
           <div class="field">
             <label for="fieldTitle">标题 title</label>
-            <input type="text" id="fieldTitle" placeholder="主标题" />
+            <input type="text" id="fieldTitle" placeholder="主标题（用 *关键词* 高亮）" />
+            <p class="compliance-warn" id="warnTitle" hidden></p>
           </div>
           <div class="field">
             <label for="fieldSubtitle">副标题 subtitle</label>
             <input type="text" id="fieldSubtitle" placeholder="副标题" />
+            <p class="compliance-warn" id="warnSubtitle" hidden></p>
           </div>
           <div class="field">
             <label for="fieldBadge">标签 badge</label>
@@ -124,6 +127,20 @@
             <label for="fieldSticker">贴纸图 URL / stickerImage（可选）</label>
             <input type="url" id="fieldSticker" placeholder="POV 模板左下贴纸槽" />
           </div>
+          <div class="field scene-field">
+            <label>背景图（场景）</label>
+            <div class="scene-grid" id="sceneGrid"></div>
+            <div class="scene-row">
+              <input type="file" id="sceneFile" accept="image/*" />
+            </div>
+            <div class="scene-sliders">
+              <label class="inline">虚化 <input type="range" id="sceneBlur" min="0" max="20" step="1" value="6" /><span id="sceneBlurV">6</span></label>
+              <label class="inline">明暗 <input type="range" id="sceneBright" min="-60" max="60" step="5" value="0" /><span id="sceneBrightV">0</span></label>
+              <label class="inline">主色蒙层 <input type="range" id="sceneTint" min="0" max="90" step="5" value="30" /><span id="sceneTintV">30</span></label>
+              <label class="inline"><input type="checkbox" id="sceneDrag" /> 拖动预览调背景焦点</label>
+            </div>
+            <p class="hint" id="sceneHint">「自动」= 用模板推荐背景（POV 模板默认咖啡馆）；选「无」用模板原背景。上传大图会先缩到 2048px 以内，只在本地处理。</p>
+          </div>
           <div class="field person-field">
             <label for="personFile">人物照片（自动抠图）</label>
             <input type="file" id="personFile" accept="image/*" />
@@ -134,7 +151,33 @@
               <button type="button" class="btn btn-sm" id="personReset">复位</button>
               <button type="button" class="btn btn-sm" id="personClear">移除</button>
             </div>
+            <div class="person-opts" id="personModeRow">
+              <label class="inline">显示方式 <select id="personMode"><option value="photo">整图背景（原照片铺满）</option><option value="sticker">抠图贴纸</option></select></label>
+              <label class="inline" title="开启后自检人物 alpha 与文字框重叠，自动移动/缩小人物或挪文字"><input type="checkbox" id="avoidToggle" checked /> 文字避让人物</label>
+              <label class="inline" title="v1.7 起默认关闭；仅在关闭「文字避让人物」时可用"><input type="checkbox" id="occludeToggle" /> 头部遮挡标题（旧版，字会被头挡住）</label>
+            </div>
+            <p class="compliance-warn" id="faceWarn" hidden></p>
             <p class="hint" id="personHint">上传人像后自动去背景（本地处理，不上传）。可在预览图上拖动人物、滚轮缩放。</p>
+            <label for="person2File" class="hint" style="display:block;margin-top:6px;">第二人物（可选，用于「对比VS」左侧；不传则左右用同一人）</label>
+            <input type="file" id="person2File" accept="image/*" />
+            <button type="button" class="btn btn-sm" id="person2Clear">移除第二人物</button>
+            <p class="hint" id="person2Hint"></p>
+          </div>
+          <div class="field design-field">
+            <label>设计优化（v1.6，对所有模板生效）</label>
+            <div class="person-opts">
+              <label class="inline">一键配色 <select id="designPalette"></select></label>
+              <label class="inline">标题字体 <select id="designFont"></select></label>
+              <label class="inline">文字效果 <select id="designTextFx"></select></label>
+              <label class="inline">人物特效 <select id="designPersonFx"></select></label>
+            </div>
+            <div class="person-opts">
+              <label class="inline"><input type="checkbox" id="designGrade" checked /> 照片调色+锐化</label>
+              <label class="inline"><input type="checkbox" id="designContrast" checked /> 文字自动对比度</label>
+              <label class="inline"><input type="checkbox" id="designDeco" checked /> 装饰≤3</label>
+              <label class="inline"><input type="checkbox" id="designGrain" /> 颗粒质感</label>
+            </div>
+            <p class="hint">自动：标题择优断行、孤字回挤、标点避头尾、主副字号比≥2.2、统一安全边距。</p>
           </div>
           <div class="field">
             <label>背景主色（若为纯色背景）</label>
@@ -155,7 +198,7 @@
         </div>
         <div class="panel-body">
           <p class="section-title">粘贴表格 / CSV / TSV</p>
-          <p class="hint">首行可为表头。列：title, subtitle, badge, image（或 image_url）。也可用 Tab / 逗号分隔；或每行一句标题。</p>
+          <p class="hint">首行可为表头。列：title, subtitle, badge, image（或 image_url）, bg（背景：库 id 如 cafe / city-night，或图片 URL；留空则用左侧当前背景）。也可用 Tab / 逗号分隔；或每行一句标题。</p>
           <textarea class="batch-textarea" id="batchInput" placeholder="title,subtitle,badge,image&#10;30天居家训练,无需器械,健身,&#10;秋日穿搭灵感,Minimal Style,时尚,&#10;AI 工具清单,效率翻倍,科技,"></textarea>
           <label for="batchPersonFiles" class="hint" style="display:block;margin-top:8px;">人物照片（可多选，按文件名排序后依次对应第 1、2、3… 行；没有对应照片的行用左侧当前人物）</label>
           <input type="file" id="batchPersonFiles" accept="image/*" multiple />
@@ -179,13 +222,23 @@
   </div>
 
   <!-- JSZip CDN -->
-  <script src="vendor/jszip/jszip.min.js?v=1.3"></script>
+  <script src="vendor/jszip/jszip.min.js?v=2.0"></script>
   <script>window.JSZip || document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>')</script>
-  <script src="sizes.js?v=1.3"></script>
-  <script src="templates.js?v=1.3"></script>
-  <script src="renderer.js?v=1.3"></script>
-  <script src="generator.js?v=1.3"></script>
-  <script src="segment.js?v=1.3"></script>
-  <script src="app.js?v=1.3"></script>
+  <script src="assets/backgrounds/index.js?v=2.0"></script>
+  <script src="compliance.js?v=2.0"></script>
+  <script src="sizes.js?v=2.0"></script>
+  <script src="templates.js?v=2.0"></script>
+  <script src="templates-ref.js?v=2.0"></script>
+  <script src="templates-replica.js?v=2.0"></script>
+  <script src="templates-replica-a.js?v=2.0"></script>
+  <script src="templates-replica-b.js?v=2.0"></script>
+  <script src="templates-square.js?v=2.0"></script>
+  <script src="templates-batch20.js?v=2.0"></script>
+  <script src="vendor/icons/tabler-subset.js?v=2.0"></script>
+  <script src="renderer.js?v=2.0"></script>
+  <script src="renderer-batch20.js?v=2.0"></script>
+  <script src="generator.js?v=2.0"></script>
+  <script src="segment.js?v=2.0"></script>
+  <script src="app.js?v=2.0"></script>
 </body>
 </html>

@@ -1,0 +1,12 @@
+/* 自托管字体（子集：GB2312 一级常用汉字 3755 + GB2312 符号区 + 常用标点 + ASCII，共约 4540 字符），见 LICENSES.md */
+@font-face{font-family:"Noto Sans SC";font-weight:400;font-display:swap;src:url("NotoSansSC-Regular.subset.woff2") format("woff2");}
+@font-face{font-family:"Noto Sans SC";font-weight:500 700;font-display:swap;src:url("NotoSansSC-Bold.subset.woff2") format("woff2");}
+@font-face{font-family:"Noto Sans SC";font-weight:800 900;font-display:swap;src:url("NotoSansSC-Black.subset.woff2") format("woff2");}
+@font-face{font-family:"Smiley Sans";font-display:swap;src:url("SmileySans-Oblique.subset.woff2") format("woff2");}
+@font-face{font-family:"ZCOOL KuaiLe";font-display:swap;src:url("ZCOOLKuaiLe-Regular.subset.woff2") format("woff2");}
+@font-face{font-family:"Noto Serif SC";font-weight:700 900;font-display:swap;src:url("NotoSerifSC-Black.subset.woff2") format("woff2");}
+@font-face{font-family:"Long Cang";font-display:swap;src:url("LongCang-Regular.subset.woff2") format("woff2");}
+/* v2.0「v3 · 20套」新增（本机已有 OFL 字体子集化，见 LICENSES.md） */
+@font-face{font-family:"Noto Serif SC B20 Bold";font-weight:700;font-display:swap;src:url("NotoSerifSC-Bold.subset.woff2") format("woff2");}
+@font-face{font-family:"Noto Serif SC B20 Regular";font-weight:400;font-display:swap;src:url("NotoSerifSC-Regular.subset.woff2") format("woff2");}
+@font-face{font-family:"Noto Sans B20 Latin";font-weight:800;font-display:swap;src:url("NotoSans-SemiCondExtraBold.subset.woff2") format("woff2");}

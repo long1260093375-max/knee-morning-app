@@ -20,6 +20,9 @@
       personTransform: { dx: 0, dy: 0, scale: 1 },
     },
     person: { src: '', key: '', name: '', job: 0 },
+    person2: { src: '', key: '', name: '', job: 0 },
+    personModes: {},
+    scene: { mode: 'auto', id: '', url: '', blur: 6, bright: 0, tint: 30, fx: 50, fy: 50 },
     ref: {
       objectUrl: null,
       fileName: '',
@@ -75,27 +78,159 @@
     }`;
   }
 
-  /* —— 模板列表 —— */
+  /* —— 模板列表（v1.7：分组 + 搜索 + 用途/风格筛选 + 懒加载缩略图） —— */
+  const TPL_USES = [
+    ['all', '全部'], ['talk', '口播'], ['xhs', '小红书'], ['know', '知识干货'], ['goods', '好物/美食'], ['life', '生活 Vlog'], ['work', '职场/IP'], ['poster', '活动海报'],
+  ];
+  const TPL_STYLES = [
+    ['all', '全部风格'], ['big', '大字冲击'], ['serif', '杂志宋体'], ['cute', '手账/手写/贴纸'], ['dark', '暗黑/霓虹/黑金'], ['fresh', '清新留白'], ['collage', '拼贴/宫格'], ['card', '卡片/清单'],
+  ];
+  const GROUP_NAMES = { base: '基础模板', merged: '参考图合并版（v1.6）', early: '早期参考 2 张', custom: '自定义', batch20: 'v3 · 20套（v2.0 新增）' };
+  const tplFilter = { q: '', use: 'all', style: 'all' };
+  const openGroups = new Set(['base', 'custom', 'batch20']);
+  function tplText(t) { return [t.id, t.name, t.style, t.description, t.source, t.series].join(' ').toLowerCase(); }
+  function tplGroup(t) {
+    if (t.custom) return 'custom';
+    if (t.group) return t.group;
+    if (t.builtinRef) return 'merged';
+    return 'base';
+  }
+  function groupLabel(g) { return GROUP_NAMES[g] || ('参考复刻 · ' + g.replace(/^ref/, 'ref')); }
+  const has = (txt, re) => re.test(txt);
+  function tplUses(t) {
+    const x = tplText(t), u = [];
+    if (t.series === 'talk' || has(x, /口播|对谈|采访|字幕/)) u.push('talk');
+    if (t.series === 'xhs' || has(x, /小红书|贴纸|手账|种草|清单|笔记/)) u.push('xhs');
+    if (has(x, /干货|知识|技巧|教程|步骤|清单|方法|攻略|指南|讲透/)) u.push('know');
+    if (has(x, /好物|测评|产品|美食|面包|寿司|茶|物品|开箱|穿搭|ootd/)) u.push('goods');
+    if (has(x, /vlog|生活|旅行|日常|故事|海边|居家|小窝/)) u.push('life');
+    if (has(x, /职场|ip|采访|老板|上司|求职|成交|创业|商业/)) u.push('work');
+    if (has(x, /海报|活动|大赛|节气|计划/)) u.push('poster');
+    return u;
+  }
+  function tplStyles(t) {
+    const x = tplText(t), s = [];
+    if (has(x, /巨字|大字|四角|出血|夹|冲击|爆款|放射/)) s.push('big');
+    if (has(x, /宋体|衬线|杂志|金句|引号|竖排/)) s.push('serif');
+    if (has(x, /手账|手写|贴纸|便签|撕纸|可爱|插画/)) s.push('cute');
+    if (has(x, /霓虹|暗|黑金|夜|赛博|科技/)) s.push('dark');
+    if (has(x, /留白|清新|简约|浅色|文艺/)) s.push('fresh');
+    if (has(x, /拼贴|宫格|照片条|网格|多图/)) s.push('collage');
+    if (has(x, /卡片|清单|列表|编号/)) s.push('card');
+    return s;
+  }
+  function tplMatch(t) {
+    if (tplFilter.q) { const qs = tplFilter.q.toLowerCase().split(/\s+/).filter(Boolean); const x = tplText(t); if (!qs.every((q) => x.includes(q))) return false; }
+    if (tplFilter.use !== 'all' && !tplUses(t).includes(tplFilter.use)) return false;
+    if (tplFilter.style !== 'all' && !tplStyles(t).includes(tplFilter.style)) return false;
+    return true;
+  }
+  function setupTemplateFilters() {
+    const host = $('#tplFilters'); if (!host || host.dataset.ready) return;
+    host.dataset.ready = '1';
+    host.innerHTML = `<input type="search" id="tplSearch" class="tpl-search" placeholder="搜索：名称 / 风格 / 编号（如 ref3、宋体、清单）" aria-label="搜索模板" />
+      <div class="tpl-chips" id="tplUses">${TPL_USES.map(([k, n]) => `<button type="button" class="chip${k === 'all' ? ' active' : ''}" data-use="${k}">${n}</button>`).join('')}</div>
+      <select id="tplStyle" class="tpl-style" aria-label="按风格筛选">${TPL_STYLES.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>`;
+    let tmr = null;
+    $('#tplSearch').addEventListener('input', (e) => { clearTimeout(tmr); tmr = setTimeout(() => { tplFilter.q = e.target.value.trim(); refreshTemplateList(); }, 120); });
+    host.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => {
+      tplFilter.use = b.dataset.use; host.querySelectorAll('[data-use]').forEach((x) => x.classList.toggle('active', x === b)); refreshTemplateList();
+    }));
+    $('#tplStyle').addEventListener('change', (e) => { tplFilter.style = e.target.value; refreshTemplateList(); });
+  }
+
+  /* 懒加载缩略图：进入可视区才渲染；串行队列 + 空闲时执行；按「模板 + 人物照片」缓存 */
+  const thumbCache = new Map();
+  const thumbQueue = [];
+  let thumbBusy = false, thumbObserver = null;
+  function thumbKey(id) { return id + '|' + (state.person && state.person.src ? state.person.src.slice(-24) : 'none'); }
+  function thumbSize(t) {
+    const r = t.preferredRatio || '3:4';
+    return r === '9:16' ? { id: 'thumb', width: 108, height: 192 } : r === '1:1' ? { id: 'thumb', width: 144, height: 144 } : r === '16:9' ? { id: 'thumb', width: 192, height: 108 } : { id: 'thumb', width: 132, height: 176 };
+  }
+  function pumpThumbs() {
+    if (thumbBusy || !thumbQueue.length) return;
+    thumbBusy = true;
+    const run = async () => {
+      const el = thumbQueue.shift();
+      try {
+        const id = el && el.dataset.id; const t = id && CoverTemplates.getById(id);
+        if (t && el.isConnected) {
+          const k = thumbKey(id);
+          if (!thumbCache.has(k)) {
+            const c = document.createElement('canvas');
+            await CoverRenderer.render(c, t, thumbSize(t), { scene: sceneFor(t), ...photoExtras(t, state.data.person, state.person.src) });
+            thumbCache.set(k, c.toDataURL('image/jpeg', 0.72));
+          }
+          el.style.backgroundImage = `url(${thumbCache.get(k)})`; el.classList.add('loaded');
+        }
+      } catch (e) { /* 缩略图失败不影响主流程 */ }
+      thumbBusy = false;
+      if (thumbQueue.length) { if (window.requestIdleCallback) window.requestIdleCallback(pumpThumbs, { timeout: 300 }); else setTimeout(pumpThumbs, 30); }
+    };
+    run();
+  }
+  function observeThumbs(root) {
+    if (!('IntersectionObserver' in window)) return;
+    if (!thumbObserver) thumbObserver = new IntersectionObserver((ents) => {
+      ents.forEach((en) => {
+        if (!en.isIntersecting) return;
+        thumbObserver.unobserve(en.target);
+        const k = thumbKey(en.target.dataset.id);
+        if (thumbCache.has(k)) { en.target.style.backgroundImage = `url(${thumbCache.get(k)})`; en.target.classList.add('loaded'); }
+        else { thumbQueue.push(en.target); pumpThumbs(); }
+      });
+    }, { root: $('#tab-library') && $('#tab-library').closest('.panel-body'), rootMargin: '200px 0px' });
+    root.querySelectorAll('.tpl-thumb:not(.loaded)').forEach((el) => thumbObserver.observe(el));
+  }
+
   function refreshTemplateList() {
+    setupTemplateFilters();
     const list = $('#templateList');
     const all = CoverTemplates.all();
-    list.innerHTML = all
-      .map((t) => {
-        const active = t.id === state.templateId ? 'active' : '';
-        const custom = t.custom
-          ? '<span class="badge-custom">自定义</span>'
-          : '';
-        return `<button type="button" class="template-card ${active}" data-id="${t.id}">
-          <span class="name">${escapeHtml(t.name)}</span>
-          ${custom}
-          <span class="desc">${escapeHtml(t.description || t.style || '')}</span>
-        </button>`;
-      })
-      .join('');
-
-    list.querySelectorAll('.template-card').forEach((btn) => {
-      btn.addEventListener('click', () => selectTemplate(btn.dataset.id));
+    const filtering = !!(tplFilter.q || tplFilter.use !== 'all' || tplFilter.style !== 'all');
+    const groups = new Map();
+    all.forEach((t) => { const g = tplGroup(t); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(t); });
+    const order = [...groups.keys()].sort((a, b) => {
+      const rank = (g) => (g === 'custom' ? 0 : g === 'base' ? 1 : g === 'merged' ? 2 : g === 'early' ? 4 : 3);
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0);
     });
+    let shown = 0;
+    const html = order.map((g) => {
+      const items = groups.get(g);
+      const vis = items.filter(tplMatch);
+      // 所有卡片都保留在 DOM（隐藏不匹配项），保证选择/批量等功能按 id 可找到
+      const cards = items.map((t) => {
+        const active = t.id === state.templateId ? ' active' : '';
+        const hide = vis.includes(t) ? '' : ' hidden';
+        const custom = t.custom ? '<span class="badge-custom">自定义</span>' : '';
+        return `<button type="button" class="template-card${active}" data-id="${t.id}" title="${escapeHtml((t.description || t.style || '') + '（' + t.id + '）')}"${hide}>
+          <span class="tpl-thumb r${(t.preferredRatio || '3:4').replace(':', 'x')}" data-id="${t.id}"></span>
+          <span class="name">${escapeHtml(t.name)}</span>${custom}
+          <span class="desc">${escapeHtml(t.style || '')}</span>
+        </button>`;
+      }).join('');
+      shown += vis.length;
+      const open = filtering ? vis.length > 0 : openGroups.has(g) || items.some((t) => t.id === state.templateId);
+      return `<details class="tpl-group" data-group="${g}"${open ? ' open' : ''}${filtering && !vis.length ? ' hidden' : ''}>
+        <summary>${escapeHtml(groupLabel(g))}<span class="count">${filtering ? vis.length + ' / ' : ''}${items.length}</span></summary>
+        <div class="tpl-grid">${cards}</div></details>`;
+    }).join('');
+    list.innerHTML = html + `<p class="tpl-empty"${shown ? ' hidden' : ''}>没有匹配的模板，换个关键词试试。</p>`;
+    list.querySelectorAll('.template-card').forEach((btn) => btn.addEventListener('click', () => selectTemplate(btn.dataset.id)));
+    list.querySelectorAll('.tpl-group').forEach((d) => d.addEventListener('toggle', () => {
+      if (!filtering) { if (d.open) openGroups.add(d.dataset.group); else openGroups.delete(d.dataset.group); }
+      if (d.open) observeThumbs(d);
+    }));
+    list.querySelectorAll('.tpl-group[open]').forEach((d) => observeThumbs(d));
+    const meta = $('#tplCount'); if (meta) meta.textContent = filtering ? `匹配 ${shown} / 共 ${all.length} 个` : `共 ${all.length} 个模板`;
+  }
+  function markActiveTemplate() {
+    const list = $('#templateList');
+    if (!list || !list.querySelector('.template-card')) { refreshTemplateList(); return; }
+    list.querySelectorAll('.template-card').forEach((b) => b.classList.toggle('active', b.dataset.id === state.templateId));
   }
 
   function selectTemplate(id) {
@@ -104,9 +239,12 @@
     state.templateId = id;
     state.template = CoverTemplates.clone(t);
     applySampleToFields();
-    refreshTemplateList();
+    markActiveTemplate();
     rebuildLayerList();
     syncBgColorFields();
+    if (typeof renderSceneGrid === 'function' && $('#sceneGrid')) { renderSceneGrid(); syncSceneSliders(); }
+    if (typeof syncPersonMode === 'function') syncPersonMode();
+    if (typeof updateCompliance === 'function') updateCompliance();
     scheduleRender();
     setStatus(`已选择模板：${t.name}`);
   }
@@ -226,8 +364,10 @@
     const size = currentSize();
     const template = currentTemplate();
     try {
-      await CoverRenderer.render(canvas, template, size, state.data);
+      await CoverRenderer.render(canvas, template, size, renderData(template));
       if (token !== state.renderToken) return;
+      updateFaceWarn(canvas);
+      if ($('#guideToggle') && $('#guideToggle').checked) { CoverRenderer.drawSafeGuides(canvas, size.id); CoverRenderer.drawFaceGuide(canvas); }
       setStatus(`预览已更新 · ${size.width}×${size.height} · ${template.name}`, 'ok');
     } catch (err) {
       console.error(err);
@@ -249,13 +389,15 @@
     const template = currentTemplate();
     setStatus('正在导出 PNG…');
     try {
-      const blob = await CoverRenderer.toPngBlob(template, size, state.data);
+      const blob = await CoverRenderer.toPngBlob(template, size, renderData(template));
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `${safeFilename(state.data.title || template.name)}.png`;
       a.click();
       URL.revokeObjectURL(a.href);
-      setStatus('PNG 已下载', 'ok');
+      const av = CoverRenderer.getLastAvoid && CoverRenderer.getLastAvoid();
+      if (av && av.on && !av.ok) setStatus(`PNG 已下载，但自检发现文字仍压到人物（最大 ${Math.round(av.maxRatio * 100)}%${av.faceHit ? '，碰到脸' : ''}），见人物区红色提示`, 'err');
+      else setStatus('PNG 已下载' + (av && av.on ? ' · 自检：文字未遮挡人物' : ''), 'ok');
     } catch (err) {
       setStatus('导出失败：' + err.message, 'err');
     }
@@ -284,6 +426,7 @@
     const size = currentSize();
     const template = currentTemplate();
     const zip = new JSZip();
+    window.__avoidBad = [];
     setStatus(`正在打包 ${list.length} 张封面…`);
 
     for (let i = 0; i < list.length; i++) {
@@ -297,15 +440,20 @@
         bgImage: row.bgImage || row.image || row.image_url || '',
         stickerImage: row.stickerImage || row.sticker || '',
         person: state.data.person,
+        person2: state.data.person2,
         personTransform: state.data.personTransform,
+        scene: sceneForRow(row, template),
       };
+      Object.assign(data, photoExtras(template, data.person, state.person.src));
       if (row.personSrc) {
         setStatus(`正在处理第 ${i + 1}/${list.length} 张人物图…`);
         data.person = await personUrlFor(row.personSrc, row.personKey, row.personName);
         data.personTransform = { dx: 0, dy: 0, scale: 1 };
+        Object.assign(data, photoExtras(template, data.person, row.personSrc));
       }
       const blob = await CoverRenderer.toPngBlob(template, size, data);
-      const name = `${String(i + 1).padStart(2, '0')}_${safeFilename(data.title || 'cover')}.png`;
+      { const av = CoverRenderer.getLastAvoid && CoverRenderer.getLastAvoid(); if (av && av.on && !av.ok) (window.__avoidBad = window.__avoidBad || []).push(i + 1); }
+      const name = `${String(i + 1).padStart(2, '0')}_${safeFilename(String(data.title || 'cover').replace(/\*/g, ''))}.png`;
       zip.file(name, blob);
     }
 
@@ -315,7 +463,7 @@
     a.download = `covers_${size.id}_${Date.now()}.zip`;
     a.click();
     URL.revokeObjectURL(a.href);
-    setStatus(`已导出 ZIP（${list.length} 张）`, 'ok');
+    setStatus(`已导出 ZIP（${list.length} 张）` + (window.__avoidBad.length ? ` · ⛔ 第 ${window.__avoidBad.join('、')} 张文字仍压到人物` : ' · 自检：文字未遮挡人物'), window.__avoidBad.length ? 'err' : 'ok');
   }
 
   /* —— 批量解析 —— */
@@ -411,6 +559,10 @@
       image: 'image',
       image_url: 'image_url',
       图片: 'image',
+      bg: 'bg',
+      背景: 'bg',
+      background: 'bg',
+      scene: 'bg',
     };
     return map[h] || h;
   }
@@ -956,8 +1108,15 @@
     const cv = $('#previewCanvas');
     let drag = null;
     cv.addEventListener('pointerdown', (e) => {
-      if (!state.data.person) return;
       const r = cv.getBoundingClientRect();
+      if ($('#sceneDrag') && $('#sceneDrag').checked && sceneFor(currentTemplate())) {
+        const sc = state.scene;
+        if (sc.mode === 'auto') { const cur = sceneFor(currentTemplate()); Object.assign(sc, { blur: cur.blur, bright: cur.bright, tint: cur.tint, touched: true }); }
+        drag = { scene: true, x: e.clientX, y: e.clientY, w: r.width, h: r.height, fx: sc.fx, fy: sc.fy };
+        cv.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (!state.data.person) return;
       const t = state.data.personTransform;
       drag = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, dx: t.dx, dy: t.dy };
       cv.setPointerCapture(e.pointerId);
@@ -965,6 +1124,13 @@
     cv.addEventListener('pointermove', (e) => {
       cv.classList.toggle('person-drag', !!state.data.person);
       if (!drag) return;
+      if (drag.scene) {
+        // 向右拖 → 看到图的更左侧（焦点减小）
+        state.scene.fx = Math.max(0, Math.min(100, drag.fx - ((e.clientX - drag.x) / drag.w) * 150));
+        state.scene.fy = Math.max(0, Math.min(100, drag.fy - ((e.clientY - drag.y) / drag.h) * 150));
+        scheduleRender();
+        return;
+      }
       const t = state.data.personTransform;
       t.dx = drag.dx + ((e.clientX - drag.x) / drag.w) * 100;
       t.dy = drag.dy + ((e.clientY - drag.y) / drag.h) * 100;
@@ -988,12 +1154,275 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* —— v1.5：场景背景图 —— */
+  const BG_LIB = (window.COVER_BACKGROUNDS || []).map((b) => ({ ...b, url: 'assets/backgrounds/' + b.file, thumbUrl: 'assets/backgrounds/' + b.thumb }));
+  function libById(id) { return BG_LIB.find((b) => b.id === id) || null; }
+
+  /** 当前模板实际使用的场景（auto → 模板推荐） */
+  function sceneFor(template) {
+    const sc = state.scene;
+    if (sc.mode === 'none') return null;
+    if (sc.mode === 'auto') {
+      const lib = template && template.defaultScene ? libById(template.defaultScene) : null;
+      if (!lib) return null;
+      return { url: lib.url, ...(template.sceneDefaults || { blur: 6, bright: 0, tint: 30 }), fx: sc.fx, fy: sc.fy, ...(sc.touched ? { blur: sc.blur, bright: sc.bright, tint: sc.tint } : {}) };
+    }
+    if (!sc.url) return null;
+    return { url: sc.url, blur: sc.blur, bright: sc.bright, tint: sc.tint, fx: sc.fx, fy: sc.fy };
+  }
+  function sceneForRow(row, template) {
+    const v = row && row.bg ? String(row.bg).trim() : '';
+    if (!v) return sceneFor(template);
+    if (/^(none|无)$/i.test(v)) return null;
+    const lib = libById(v);
+    const base = sceneFor(template) || { blur: state.scene.blur, bright: state.scene.bright, tint: state.scene.tint, fx: 50, fy: 50 };
+    return { ...base, url: lib ? lib.url : v };
+  }
+  function personModeFor(template) {
+    if (!template.photo) return 'sticker';
+    return state.personModes[template.id] || template.defaultPersonMode || 'photo';
+  }
+  function designOpts() {
+    const v = (id, d) => { const e = document.getElementById(id); return e ? (e.type === 'checkbox' ? e.checked : e.value) : d; };
+    return {
+      palette: v('designPalette', 'none'), fontStyle: v('designFont', 'auto'),
+      grade: v('designGrade', true), autoContrast: v('designContrast', true),
+      decoLimit: v('designDeco', true) ? 3 : 0, grain: v('designGrain', false) ? 0.06 : 0,
+      textFx: v('designTextFx', 'auto'), personFx: v('designPersonFx', 'auto'),
+    };
+  }
+  function initDesignUI() {
+    const P = CoverRenderer.PALETTES || {}, F = CoverRenderer.FONT_STYLES || {};
+    const ps = document.getElementById('designPalette'), fs = document.getElementById('designFont');
+    if (ps) ps.innerHTML = Object.entries(P).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join('');
+    if (fs) fs.innerHTML = Object.entries(F).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join('');
+    [['designTextFx', CoverRenderer.TEXT_FX], ['designPersonFx', CoverRenderer.PERSON_FX]].forEach(([id, M]) => { const e = document.getElementById(id); if (e && M) e.innerHTML = Object.entries(M).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join(''); });
+    ['designPalette', 'designFont', 'designTextFx', 'designPersonFx', 'designGrade', 'designContrast', 'designDeco', 'designGrain'].forEach((id) => {
+      const e = document.getElementById(id); if (e) e.addEventListener('change', () => { scheduleRender(); if (typeof renderBatchPreviews === 'function') try { renderBatchPreviews(); } catch (x) {} });
+    });
+  }
+  function photoExtras(template, personUrl, photoSrc) {
+    const box = window.CoverSegment && CoverSegment.box ? CoverSegment.box(personUrl) : null;
+    return {
+      design: designOpts(),
+      personPhoto: photoSrc || '',
+      personMode: personModeFor(template),
+      occlude: $('#occludeToggle') ? $('#occludeToggle').checked : false,
+      avoidPerson: $('#avoidToggle') ? $('#avoidToggle').checked : true,
+      personBox: box,
+    };
+  }
+  function renderData(template) {
+    return { ...state.data, scene: sceneFor(template), ...photoExtras(template, state.data.person, state.person.src) };
+  }
+  function syncPersonMode() {
+    const t = currentTemplate();
+    const row = $('#personModeRow');
+    if (!row) return;
+    const sel = $('#personMode');
+    sel.disabled = !t.photo;
+    sel.value = personModeFor(t);
+    $('#occludeToggle').disabled = !t.photo || sel.value !== 'photo' || ($('#avoidToggle') && $('#avoidToggle').checked);
+  }
+  function updateFaceWarn(canvas) {
+    const el = $('#faceWarn');
+    if (!el) return;
+    const av = canvas && canvas._avoid;
+    if (av && av.on) {
+      el.classList.toggle('avoid-bad', !av.ok);
+      if (!av.ok) {
+        const bad = av.items.filter((o) => o.ratio > 0.03 || o.face > 0.002);
+        el.textContent = `⛔ 文字仍压到人物：${bad.map((o) => `「${o.id}」${o.face > 0.002 ? '碰到脸' : Math.round(o.ratio * 100) + '%'}`).join('、')}。已自动移动/缩小人物与文字但无法完全避开，建议缩短标题、换模板或手动拖动人物。`;
+        el.hidden = false;
+      } else { el.hidden = true; el.textContent = ''; }
+      return;
+    }
+    el.classList.remove('avoid-bad');
+    const fi = canvas && canvas._faceInfo;
+    if (fi && fi.face && fi.hits.length && !fi.occluded) {
+      const pctv = Math.round(Math.max(...fi.hits.map((h) => h.ratio)) * 100);
+      el.textContent = `⚠ 文字可能遮挡人脸（约 ${pctv}% 脸部区域被「${fi.hits.map((h) => h.id).join('、')}」覆盖）：可拖动人物/缩放、换模板，或开启「头部遮挡标题」。脸部位置为按抠图估算，仅供参考。`;
+      el.hidden = false;
+    } else { el.hidden = true; el.textContent = ''; }
+  }
+  function syncSceneSliders() {
+    const t = currentTemplate();
+    const sc = sceneFor(t);
+    ['Blur', 'Bright', 'Tint'].forEach((k) => {
+      const key = k.toLowerCase();
+      const v = sc ? sc[key] : state.scene[key];
+      $('#scene' + k).value = v;
+      $('#scene' + k + 'V').textContent = v;
+    });
+  }
+  function renderSceneGrid() {
+    const grid = $('#sceneGrid');
+    if (!grid) return;
+    const sc = state.scene;
+    const t = currentTemplate();
+    const items = [
+      `<button type="button" class="scene-item text-only${sc.mode === 'auto' ? ' active' : ''}" data-scene="auto" title="用模板推荐背景">自动${t && t.defaultScene ? '·' + ((libById(t.defaultScene) || {}).name || '') : ''}</button>`,
+      `<button type="button" class="scene-item text-only${sc.mode === 'none' ? ' active' : ''}" data-scene="none" title="不用背景图，保留模板原背景">无</button>`,
+    ];
+    BG_LIB.forEach((b) => {
+      items.push(`<button type="button" class="scene-item${sc.mode === 'lib' && sc.id === b.id ? ' active' : ''}" data-scene="${b.id}" title="${escapeHtml(b.name)}" style="background-image:url('${b.thumbUrl}')"><span>${escapeHtml(b.name)}</span></button>`);
+    });
+    if (sc.mode === 'upload') items.push(`<button type="button" class="scene-item active" data-scene="upload" style="background-image:url('${sc.url}')"><span>我的上传</span></button>`);
+    grid.innerHTML = items.join('');
+  }
+  function chooseScene(mode, id, url) {
+    const sc = state.scene;
+    sc.mode = mode; sc.id = id || ''; sc.url = url || '';
+    sc.fx = 50; sc.fy = 50;
+    if (mode === 'lib' || mode === 'upload') {
+      // 新背景默认：轻虚化 + 半透明主色蒙层，保证标题可读
+      const lib = libById(id);
+      sc.blur = 6; sc.bright = lib && lib.tone === 'dark' ? 0 : -5; sc.tint = 30; sc.touched = true;
+    } else { sc.touched = false; }
+    renderSceneGrid(); syncSceneSliders(); scheduleRender();
+  }
+  /** 上传背景：先降采样到长边 ≤2048，防止超大图爆内存 */
+  function downscaleFile(file, maxSide) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        if (k >= 1) { resolve(url); return; }
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob((b) => (b ? resolve(URL.createObjectURL(b)) : reject(new Error('压缩失败'))), 'image/jpeg', 0.9);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片无法读取')); };
+      img.src = url;
+    });
+  }
+  function initScene() {
+    if (!$('#sceneGrid')) return;
+    renderSceneGrid(); syncSceneSliders();
+    $('#sceneGrid').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-scene]');
+      if (!b) return;
+      const v = b.dataset.scene;
+      if (v === 'auto' || v === 'none') chooseScene(v);
+      else if (v === 'upload') return;
+      else { const lib = libById(v); if (lib) chooseScene('lib', v, lib.url); }
+    });
+    $('#sceneFile').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      if (!f.type.startsWith('image/')) { $('#sceneHint').textContent = '请选择图片文件'; return; }
+      try {
+        const url = await downscaleFile(f, 2048);
+        chooseScene('upload', '', url);
+        $('#sceneHint').textContent = '已载入自定义背景（已降采样，仅本地处理）。勾选「拖动预览调背景焦点」可移动构图。';
+      } catch (err) { $('#sceneHint').textContent = '背景图读取失败：' + err.message + '，已保持模板原背景'; }
+    });
+    ['Blur', 'Bright', 'Tint'].forEach((k) => {
+      $('#scene' + k).addEventListener('input', (e) => {
+        const sc = state.scene;
+        if (sc.mode === 'auto') {
+          const cur = sceneFor(currentTemplate());
+          if (cur) { sc.blur = cur.blur; sc.bright = cur.bright; sc.tint = cur.tint; }
+        }
+        sc[k.toLowerCase()] = Number(e.target.value); sc.touched = true;
+        $('#scene' + k + 'V').textContent = e.target.value;
+        scheduleRender();
+      });
+    });
+  }
+
+  /* —— v1.5：第二人物（对比VS 左侧） —— */
+  async function refreshPerson2() {
+    const p = state.person2;
+    if (!p.src) { state.data.person2 = ''; scheduleRender(); return; }
+    const job = ++p.job;
+    $('#person2Hint').textContent = '正在抠图…';
+    const url = await personUrlFor(p.src, p.key, p.name);
+    if (job !== p.job) return;
+    state.data.person2 = url;
+    $('#person2Hint').textContent = '第二人物已就绪（用于「对比VS」左侧）';
+    scheduleRender();
+  }
+  function initPerson2() {
+    if (!$('#person2File')) return;
+    $('#person2File').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !f.type.startsWith('image/')) return;
+      Object.assign(state.person2, { src: URL.createObjectURL(f), key: fileKey(f) + '#2', name: f.name });
+      refreshPerson2();
+    });
+    $('#person2Clear').addEventListener('click', () => {
+      state.person2.src = ''; state.person2.job++; $('#person2File').value = ''; $('#person2Hint').textContent = '';
+      refreshPerson2();
+    });
+  }
+
+  /* —— v1.5：合规词提醒 —— */
+  function updateCompliance() {
+    if (!window.CoverCompliance) return;
+    [['#fieldTitle', '#warnTitle'], ['#fieldSubtitle', '#warnSubtitle']].forEach(([f, w]) => {
+      const el = $(w); if (!el) return;
+      const msg = CoverCompliance.summarize($(f).value.replace(/\*/g, ''));
+      el.textContent = msg; el.hidden = !msg;
+    });
+  }
+
+  /* —— v1.5：一键多平台 ZIP —— */
+  const MULTI_SIZES = [['xhs-3-4', '小红书3x4'], ['douyin-9-16', '抖音9x16'], ['bilibili-16-9', 'B站16x9'], ['ratio-1-1', '方图1x1']];
+  async function exportMulti() {
+    if (typeof JSZip === 'undefined') { setStatus('JSZip 未加载', 'err'); return; }
+    readFieldsToData();
+    const template = currentTemplate();
+    const zip = new JSZip();
+    const base = safeFilename(String(state.data.title || template.name).replace(/\*/g, ''));
+    window.__avoidBad = [];
+    for (let i = 0; i < MULTI_SIZES.length; i++) {
+      const [id, label] = MULTI_SIZES[i];
+      const size = CoverSizes.getById(id);
+      if (!size) continue;
+      setStatus(`正在导出 ${label}（${i + 1}/${MULTI_SIZES.length}）…`);
+      const blob = await CoverRenderer.toPngBlob(template, size, renderData(template));
+      { const av = CoverRenderer.getLastAvoid && CoverRenderer.getLastAvoid(); if (av && av.on && !av.ok) (window.__avoidBad = window.__avoidBad || []).push(label); }
+      zip.file(`${String(i + 1).padStart(2, '0')}_${label}_${size.width}x${size.height}_${base}.png`, blob);
+    }
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = `multi_${base}_${Date.now()}.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus('已导出多平台 ZIP（4 个尺寸）' + (window.__avoidBad.length ? ` · ⛔ ${window.__avoidBad.join('、')} 文字仍压到人物` : ' · 自检通过'), window.__avoidBad.length ? 'err' : 'ok');
+  }
+
+  function initV15() {
+    initScene();
+    initPerson2();
+    ['#fieldTitle', '#fieldSubtitle'].forEach((id) => $(id) && $(id).addEventListener('input', updateCompliance));
+    if ($('#guideToggle')) $('#guideToggle').addEventListener('change', scheduleRender);
+    if ($('#btnExportMulti')) $('#btnExportMulti').addEventListener('click', exportMulti);
+    updateCompliance();
+    if ($('#personMode')) {
+      $('#personMode').addEventListener('change', (e) => {
+        state.personModes[currentTemplate().id] = e.target.value;
+        syncPersonMode();
+        scheduleRender();
+      });
+      $('#occludeToggle').addEventListener('change', scheduleRender);
+      if ($('#avoidToggle')) $('#avoidToggle').addEventListener('change', () => { syncPersonMode(); scheduleRender(); });
+      initDesignUI();
+    }
+  }
+
   /* —— 启动 —— */
   function boot() {
     initSizeSelect();
     initTabs();
     initFields();
     initPerson();
+    initV15();
     initReferenceStub();
     refreshTemplateList();
     selectTemplate(state.templateId);

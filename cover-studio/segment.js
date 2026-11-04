@@ -143,9 +143,13 @@ window.CoverSegment = (function () {
       final.getContext('2d').drawImage(out, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
     }
     const blob = await new Promise((r) => final.toBlob(r, 'image/png'));
-    return URL.createObjectURL(blob);
+    const u = URL.createObjectURL(blob);
+    // 记录裁剪框（相对原图比例），供「整图背景 + 头部遮挡」模式与原照片对齐
+    boxes.set(u, box ? { x: box.x / w, y: box.y / h, w: box.w / w, h: box.h / h } : { x: 0, y: 0, w: 1, h: 1 });
+    return u;
   }
 
+  const boxes = new Map();
   function alphaBBox(ctx, w, h) {
     const d = ctx.getImageData(0, 0, w, h).data;
     let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -174,5 +178,5 @@ window.CoverSegment = (function () {
     return p;
   }
 
-  return { cutout, preload: getSegmenter, info: () => modelInfo };
+  return { cutout, preload: getSegmenter, info: () => modelInfo, box: (u) => boxes.get(u) || null };
 })();

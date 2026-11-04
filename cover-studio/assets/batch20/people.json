@@ -1,0 +1,176 @@
+{
+ "blond_point": {
+  "src": "assets/batch20/p_blond_point.jpg",
+  "heads": [
+   [
+    0.3,
+    0.03,
+    0.7,
+    0.41
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_boy_blond_point.jpg"
+ },
+ "holdcube": {
+  "src": "assets/batch20/p_holdcube.jpg",
+  "heads": [
+   [
+    0.28,
+    0.07,
+    0.77,
+    0.48
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_holdcube.jpg"
+ },
+ "mic": {
+  "src": "assets/batch20/p_mic.jpg",
+  "heads": [
+   [
+    0.23,
+    0.11,
+    0.62,
+    0.41
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_mic.jpg"
+ },
+ "mug": {
+  "src": "assets/batch20/p_mug.jpg",
+  "heads": [
+   [
+    0.31,
+    0.12,
+    0.64,
+    0.41
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_sunglass_mug.jpg"
+ },
+ "side1": {
+  "src": "assets/batch20/p_side1.jpg",
+  "heads": [
+   [
+    0.23,
+    0.09,
+    0.67,
+    0.46
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_sunglass_side1.jpg"
+ },
+ "side2": {
+  "src": "assets/batch20/p_side2.jpg",
+  "heads": [
+   [
+    0.43,
+    0.12,
+    0.84,
+    0.43
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_sunglass_side2.jpg"
+ },
+ "wine": {
+  "src": "assets/batch20/p_wine.jpg",
+  "heads": [
+   [
+    0.28,
+    0.03,
+    0.67,
+    0.39
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_sunglass_wine.jpg"
+ },
+ "thumbsup": {
+  "src": "assets/batch20/p_thumbsup.jpg",
+  "heads": [
+   [
+    0.23,
+    0.09,
+    0.74,
+    0.49
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_man_thumbsup.jpg"
+ },
+ "office": {
+  "src": "assets/batch20/p_office.jpg",
+  "heads": [
+   [
+    0.28,
+    0.02,
+    0.7,
+    0.41
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_woman_office.jpg"
+ },
+ "selfie": {
+  "src": "assets/batch20/p_selfie.jpg",
+  "heads": [
+   [
+    0.18,
+    0.07,
+    0.6,
+    0.48
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_woman_selfie.jpg"
+ },
+ "ootd": {
+  "src": "assets/batch20/p_ootd.jpg",
+  "heads": [
+   [
+    0.35,
+    0.07,
+    0.64,
+    0.26
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_woman_ootd_full.jpg"
+ },
+ "duo": {
+  "src": "assets/batch20/p_duo.jpg",
+  "heads": [
+   [
+    0.2,
+    0.09,
+    0.42,
+    0.26
+   ],
+   [
+    0.6,
+    0.09,
+    0.82,
+    0.26
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_duo_standing.jpg"
+ },
+ "astronaut": {
+  "src": "assets/batch20/p_astronaut.jpg",
+  "heads": [
+   [
+    0.42,
+    0.17,
+    0.66,
+    0.32
+   ]
+  ],
+  "from": "/workspace/cover-studio-assets-gen/p_astronaut_man.jpg"
+ },
+ "wave": {
+  "src": "assets/batch20/p_wave.jpg",
+  "heads": [
+   [
+    0.293,
+    0.273,
+    0.729,
+    0.586
+   ]
+  ],
+  "from": "/workspace/polish1/person.jpg"
+ }
+}
