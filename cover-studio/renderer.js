@@ -1864,9 +1864,30 @@ window.CoverRenderer = (function () {
     const minSide = Math.min(W, H);
     const plMain = layers.find((l) => l.binding === 'person');
     const minSc = (plMain && plMain.minScale) || 0; // v1.7：模板可限制避让时人物最小缩放（宁可缩字也不缩人）
-    const scales = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52].filter((v) => v >= minSc - 1e-6);
-    const dxs = [0, -8, 8, -14, 14, -20, 20, -26, 26, -32, 32];
-    const dys = [0, 4, 8, 12, 16, 22, -4, -8, -12, -16, -22, -28, -34, -40];
+    // v2.2：先尝试只缩字 / 挪字，人物保持模板默认框（tf0）
+    for (const ts of [0.92, 0.84, 0.76]) {
+      const lay = scaleText(layers, ts);
+      const boxesT = measureBoxes(lay, W, H, data);
+      const csT = conflictScore(overlapOf(boxesT, masks0, W, H));
+      if (csT.bad === 0 && csT.face === 0) return { tf: tf0, layers: lay, moved: true, score: csT };
+      const ovT = overlapOf(boxesT, masks0, W, H);
+      const nl = relocate(lay, ovT, masks0, W, H, data);
+      if (nl) {
+        const csN = conflictScore(overlapOf(measureBoxes(nl, W, H, data), masks0, W, H));
+        if (csN.bad === 0 && csN.face === 0) return { tf: tf0, layers: nl, moved: true, score: csN };
+      }
+    }
+    {
+      const ov0 = overlapOf(boxes1, masks0, W, H);
+      const nl0 = relocate(layers, ov0, masks0, W, H, data);
+      if (nl0) {
+        const cs0 = conflictScore(overlapOf(measureBoxes(nl0, W, H, data), masks0, W, H));
+        if (cs0.bad === 0 && cs0.face === 0) return { tf: tf0, layers: nl0, moved: true, score: cs0 };
+      }
+    }
+    const scales = [1, 0.94, 0.88, 0.82, 0.76].filter((v) => v >= minSc - 1e-6);
+    const dxs = [0, -6, 6, -12, 12, -18, 18];
+    const dys = [0, 4, 8, 12, -4, -8, -12, -18];
     const bbOf = (m) => (m.g.bb ? { x: m.x + m.g.bb.x0 * m.w, y: m.y + m.g.bb.y0 * m.h, w: (m.g.bb.x1 - m.g.bb.x0) * m.w, h: (m.g.bb.y1 - m.g.bb.y0) * m.h } : null);
     const visFrac = (m) => { const b = bbOf(m); if (!b) return 1; return Math.max(0, Math.min(W, b.x + b.w) - Math.max(0, b.x)) / Math.max(1, b.w); };
     const main0 = masks0.find((q) => q.main) || masks0[0];
@@ -1885,7 +1906,8 @@ window.CoverRenderer = (function () {
         const masks = personMasks(info, tf);
         if (!valid(masks)) continue;
         const cs = conflictScore(overlapOf(boxes, masks, W, H));
-        const move = Math.abs(dx) * 0.9 + (dy >= 0 ? dy * 1.1 : -dy * 1.5 + 4) + (1 - sc) * (photoMode ? 190 : 130) + textPenalty;
+        // v2.2：大幅提高挪人/缩人代价，优先让文字避让，默认人物落在模板框内
+        const move = Math.abs(dx) * 3.2 + (dy >= 0 ? dy * 3.6 : -dy * 4.5 + 12) + (1 - sc) * (photoMode ? 420 : 360) + textPenalty;
         cand.push({ tf, cs, cost: cs.cost + move, move, layers: lay, masks });
       }
       cand.sort((a, b) => a.cost - b.cost);
@@ -2197,5 +2219,5 @@ window.CoverRenderer = (function () {
     ctx.restore();
   }
 
-  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.1", planAvoid, getLastAvoid: () => lastAvoid };
+  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.2", planAvoid, getLastAvoid: () => lastAvoid };
 })();

@@ -256,11 +256,19 @@
     list.querySelectorAll('.template-card').forEach((b) => b.classList.toggle('active', b.dataset.id === state.templateId));
   }
 
+  function resetPersonPlacement(reason) {
+    // 套用模板 / 上传新人像时回到模板默认人物框，不继承上一模板的拖动与缩放
+    state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
+    if ($('#personScale')) $('#personScale').value = 1;
+  }
+
   function selectTemplate(id) {
     const t = CoverTemplates.getById(id);
     if (!t) return;
+    const switched = id !== state.templateId;
     state.templateId = id;
     state.template = CoverTemplates.clone(t);
+    if (switched) resetPersonPlacement('template');
     applySampleToFields();
     markActiveTemplate();
     rebuildLayerList();
@@ -393,6 +401,7 @@
       updateFaceWarn(canvas);
       if ($('#guideToggle') && $('#guideToggle').checked) { CoverRenderer.drawSafeGuides(canvas, size.id); CoverRenderer.drawFaceGuide(canvas); }
       setStatus(`预览已更新 · ${size.width}×${size.height} · ${template.name}`, 'ok');
+      if (typeof syncPreviewStickyLayout === 'function') syncPreviewStickyLayout();
     } catch (err) {
       console.error(err);
       setStatus('渲染失败：' + err.message, 'err');
@@ -1096,8 +1105,7 @@
         personHint('请选择图片文件', 'err');
         return;
       }
-      state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
-      $('#personScale').value = 1;
+      resetPersonPlacement('upload');
       setPersonSource(URL.createObjectURL(f), fileKey(f), f.name);
     });
     $('#personCutout').addEventListener('change', () => {
@@ -1862,6 +1870,59 @@
   }
 
   /* —— 启动 —— */
+  function syncPreviewStickyLayout() {
+    const el = $('#previewSticky');
+    const slot = $('#previewStickySlot');
+    if (!el) return;
+    const fixed = window.matchMedia && window.matchMedia('(max-width: 1100px)').matches;
+    el.classList.toggle('is-stuck', fixed || el.classList.contains('is-stuck'));
+    if (slot) {
+      if (fixed) {
+        const h = Math.ceil(el.getBoundingClientRect().height);
+        document.documentElement.style.setProperty('--preview-sticky-h', h + 'px');
+        slot.style.height = h + 'px';
+      } else {
+        slot.style.height = '0px';
+      }
+    }
+  }
+
+  function initPreviewSticky() {
+    const el = $('#previewSticky');
+    if (!el) return;
+    syncPreviewStickyLayout();
+    window.addEventListener('resize', syncPreviewStickyLayout);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncPreviewStickyLayout);
+    // 桌面：栏内滚动时加阴影
+    if (typeof IntersectionObserver !== 'undefined') {
+      let sentinel = el.previousElementSibling;
+      if (!sentinel || !sentinel.classList || !sentinel.classList.contains('preview-sticky-sentinel')) {
+        sentinel = document.createElement('div');
+        sentinel.className = 'preview-sticky-sentinel';
+        sentinel.setAttribute('aria-hidden', 'true');
+        sentinel.style.cssText = 'height:1px;margin:0;padding:0;pointer-events:none;';
+        el.parentNode.insertBefore(sentinel, el);
+      }
+      const io = new IntersectionObserver(
+        ([e]) => {
+          if (window.matchMedia && window.matchMedia('(max-width: 1100px)').matches) return;
+          el.classList.toggle('is-stuck', e && e.intersectionRatio < 1);
+        },
+        { threshold: [1], root: el.closest('.preview-panel') || null }
+      );
+      io.observe(sentinel);
+    }
+    // 渲染后同步窄屏占位高度
+    const _sr = scheduleRender;
+    // 不包裹 scheduleRender；在 doRender 成功后轻量同步
+    const orig = window.__csStickyHooked;
+    if (!orig) {
+      window.__csStickyHooked = true;
+      const mo = new MutationObserver(() => syncPreviewStickyLayout());
+      mo.observe(el, { attributes: true, childList: true, subtree: true });
+    }
+  }
+
   function boot() {
     initSizeSelect();
     initTabs();
@@ -1869,6 +1930,7 @@
     initPerson();
     initV15();
     initReferenceStub();
+    initPreviewSticky();
     refreshTemplateList();
     selectTemplate(state.templateId);
     // 字体加载后再渲一次，避免首次空白字形

@@ -116,7 +116,20 @@ window.CoverBatch20 = (function () {
   function person(ctx, e, img, heads, PL) {
     const [x0, y0, x1, y1] = e.box, bw = x1 - x0, bh = y1 - y0; const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     const s = Math.max(bw / iw, bh / ih) * (e.zoom || 1); const sw = Math.round(iw * s), sh = Math.round(ih * s);
-    const [ax, ay] = e.anchor || [0.5, 0]; const ox = Math.round((sw - bw) * ax), oy = Math.round((sh - bh) * ay);
+    let [ax, ay] = e.anchor || [0.5, 0];
+    // v2.2：上传图按人物框对焦，使头/身落在模板人物槽内，避免宽高比不同导致跑偏
+    if (e._uploaded && e._pbox && e._pbox.w > 0.05 && e._pbox.h > 0.05) {
+      const pb = e._pbox;
+      const fx = pb.x + pb.w * 0.5;
+      const fy = Math.min(0.92, Math.max(0.05, pb.y + pb.h * 0.18));
+      // 让原图焦点落到槽的水平中心、垂直偏上（贴近模板 anchor 顶对齐意图）
+      const targetX = 0.5, targetY = Math.min(0.35, Math.max(0.08, ay || 0.12));
+      if (sw > bw) ax = Math.min(1, Math.max(0, (fx * sw - targetX * bw) / (sw - bw)));
+      else ax = 0.5;
+      if (sh > bh) ay = Math.min(1, Math.max(0, (fy * sh - targetY * bh) / (sh - bh)));
+      else ay = 0;
+    }
+    const ox = Math.round((sw - bw) * ax), oy = Math.round((sh - bh) * ay);
     if (ctx) {
       const r = e.radius || 0, fr = e.frame;
       if (fr && fr.w) { ctx.fillStyle = rgb(fr.color); rr(ctx, x0 - fr.w, y0 - fr.w, bw + 2 * fr.w, bh + 2 * fr.w, r + fr.w); ctx.fill(); }
@@ -199,7 +212,17 @@ window.CoverBatch20 = (function () {
     }
     const up = data.personPhoto || data.person || '';
     T.layers.forEach((e) => { if (e.type === 'person') { const P = (window.CoverBatch20People || {})[e.id] || {};
-      if (up) { e._src = up; e._heads = data.personHeads || null; e._pbox = data.personBox || null; e._uploaded = true; } else { e._src = P.src; e._heads = P.heads; } } });
+      if (up) {
+        e._src = up;
+        e._heads = data.personHeads || null;
+        // personBox 可能挂在抠图 URL 上；原图上传时用 data.person（抠图）查 box
+        let pb = data.personBox || null;
+        if (!pb && window.CoverSegment && CoverSegment.box) {
+          pb = CoverSegment.box(data.person) || CoverSegment.box(up) || null;
+        }
+        e._pbox = pb;
+        e._uploaded = true;
+      } else { e._src = P.src; e._heads = P.heads; } } });
     return T;
   }
   async function render(canvas, template, size, data) {
@@ -217,5 +240,5 @@ window.CoverBatch20 = (function () {
     const s = Math.max(tw / W, th / H); out.drawImage(cv, (tw - W * s) / 2, (th - H * s) / 2, W * s, H * s);
     canvas._b20 = lay; canvas._design = { scrims: 0, decoHidden: [] }; return lay;
   }
-  return { render, bind, VERSION: '2.1' };
+  return { render, bind, VERSION: '2.2' };
 })();

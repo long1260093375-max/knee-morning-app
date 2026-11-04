@@ -9,15 +9,15 @@
     可商用。用户后续可自行上传商用字体文件并在模板 fontFamily 中引用。
     请勿使用未获授权的字体文件。
   -->
-  <link rel="stylesheet" href="vendor/fonts/fonts.css?v=2.1" />
-  <link rel="stylesheet" href="style.css?v=2.1" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css?v=2.2" />
+  <link rel="stylesheet" href="style.css?v=2.2" />
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div class="brand">
         <h1>封面工坊</h1>
-        <span class="tag">v2.1</span>
+        <span class="tag">v2.2</span>
       </div>
       <div class="size-picker">
         <label for="sizeSelect">尺寸 / 平台</label>
@@ -89,15 +89,18 @@
 
       <!-- 中：预览 + 轻量编辑 -->
       <section class="preview-panel" aria-label="预览">
-        <div class="preview-toolbar">
-          <h2>实时预览</h2>
-          <div class="btn-row" style="margin:0;">
-            <button type="button" class="btn btn-sm" id="btnResetSample">恢复示例文案</button>
+        <div class="preview-sticky" id="previewSticky">
+          <div class="preview-toolbar">
+            <h2>实时预览</h2>
+            <div class="btn-row" style="margin:0;">
+              <button type="button" class="btn btn-sm" id="btnResetSample">恢复示例文案</button>
+            </div>
+          </div>
+          <div class="preview-stage">
+            <canvas id="previewCanvas" width="1080" height="1440" aria-label="封面画布"></canvas>
           </div>
         </div>
-        <div class="preview-stage">
-          <canvas id="previewCanvas" width="1080" height="1440" aria-label="封面画布"></canvas>
-        </div>
+        <div class="preview-sticky-slot" id="previewStickySlot" aria-hidden="true"></div>
 
         <div class="editor-block">
           <h3>文案与颜色（轻量编辑）</h3>
@@ -304,23 +307,23 @@
   </div>
 
   <!-- JSZip CDN -->
-  <script src="vendor/jszip/jszip.min.js?v=2.1"></script>
+  <script src="vendor/jszip/jszip.min.js?v=2.2"></script>
   <script>window.JSZip || document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>')</script>
-  <script src="assets/backgrounds/index.js?v=2.1"></script>
-  <script src="compliance.js?v=2.1"></script>
-  <script src="sizes.js?v=2.1"></script>
-  <script src="templates.js?v=2.1"></script>
-  <script src="templates-ref.js?v=2.1"></script>
-  <script src="templates-replica.js?v=2.1"></script>
-  <script src="templates-replica-a.js?v=2.1"></script>
-  <script src="templates-replica-b.js?v=2.1"></script>
-  <script src="templates-square.js?v=2.1"></script>
-  <script src="templates-batch20.js?v=2.1"></script>
-  <script src="vendor/icons/tabler-subset.js?v=2.1"></script>
-  <script src="renderer.js?v=2.1"></script>
-  <script src="renderer-batch20.js?v=2.1"></script>
-  <script src="generator.js?v=2.1"></script>
-  <script src="segment.js?v=2.1"></script>
-  <script src="app.js?v=2.1"></script>
+  <script src="assets/backgrounds/index.js?v=2.2"></script>
+  <script src="compliance.js?v=2.2"></script>
+  <script src="sizes.js?v=2.2"></script>
+  <script src="templates.js?v=2.2"></script>
+  <script src="templates-ref.js?v=2.2"></script>
+  <script src="templates-replica.js?v=2.2"></script>
+  <script src="templates-replica-a.js?v=2.2"></script>
+  <script src="templates-replica-b.js?v=2.2"></script>
+  <script src="templates-square.js?v=2.2"></script>
+  <script src="templates-batch20.js?v=2.2"></script>
+  <script src="vendor/icons/tabler-subset.js?v=2.2"></script>
+  <script src="renderer.js?v=2.2"></script>
+  <script src="renderer-batch20.js?v=2.2"></script>
+  <script src="generator.js?v=2.2"></script>
+  <script src="segment.js?v=2.2"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
 </html>
