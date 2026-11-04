@@ -2197,5 +2197,5 @@ window.CoverRenderer = (function () {
     ctx.restore();
   }
 
-  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.0", planAvoid, getLastAvoid: () => lastAvoid };
+  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.1", planAvoid, getLastAvoid: () => lastAvoid };
 })();

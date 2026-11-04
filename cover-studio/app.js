@@ -206,11 +206,13 @@
         const active = t.id === state.templateId ? ' active' : '';
         const hide = vis.includes(t) ? '' : ' hidden';
         const custom = t.custom ? '<span class="badge-custom">自定义</span>' : '';
-        return `<button type="button" class="template-card${active}" data-id="${t.id}" title="${escapeHtml((t.description || t.style || '') + '（' + t.id + '）')}"${hide}>
+        const del = t.custom ? `<button type="button" class="btn-del-custom" data-del="${t.id}" title="删除自定义模板">删除</button>` : '';
+        return `<div class="template-card${active}" data-id="${t.id}" role="button" tabindex="0" title="${escapeHtml((t.description || t.style || '') + '（' + t.id + '）')}"${hide}>
+          ${del}
           <span class="tpl-thumb r${(t.preferredRatio || '3:4').replace(':', 'x')}" data-id="${t.id}"></span>
           <span class="name">${escapeHtml(t.name)}</span>${custom}
           <span class="desc">${escapeHtml(t.style || '')}</span>
-        </button>`;
+        </div>`;
       }).join('');
       shown += vis.length;
       const open = filtering ? vis.length > 0 : openGroups.has(g) || items.some((t) => t.id === state.templateId);
@@ -219,7 +221,28 @@
         <div class="tpl-grid">${cards}</div></details>`;
     }).join('');
     list.innerHTML = html + `<p class="tpl-empty"${shown ? ' hidden' : ''}>没有匹配的模板，换个关键词试试。</p>`;
-    list.querySelectorAll('.template-card').forEach((btn) => btn.addEventListener('click', () => selectTemplate(btn.dataset.id)));
+    list.querySelectorAll('.template-card').forEach((btn) => {
+      const pick = () => selectTemplate(btn.dataset.id);
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest && e.target.closest('.btn-del-custom')) return;
+        pick();
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+      });
+    });
+    list.querySelectorAll('.btn-del-custom').forEach((b) => b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const id = b.dataset.del;
+      if (!id || !confirm('删除这个自定义模板？此操作不可恢复。')) return;
+      CoverTemplates.removeCustom(id);
+      if (state.templateId === id) {
+        const next = CoverTemplates.all()[0];
+        if (next) selectTemplate(next.id);
+      }
+      refreshTemplateList();
+      setStatus('已删除自定义模板', 'ok');
+    }));
     list.querySelectorAll('.tpl-group').forEach((d) => d.addEventListener('toggle', () => {
       if (!filtering) { if (d.open) openGroups.add(d.dataset.group); else openGroups.delete(d.dataset.group); }
       if (d.open) observeThumbs(d);
@@ -242,6 +265,7 @@
     markActiveTemplate();
     rebuildLayerList();
     syncBgColorFields();
+    if (typeof syncFxPanels === 'function') syncFxPanels();
     if (typeof renderSceneGrid === 'function' && $('#sceneGrid')) { renderSceneGrid(); syncSceneSliders(); }
     if (typeof syncPersonMode === 'function') syncPersonMode();
     if (typeof updateCompliance === 'function') updateCompliance();
@@ -1397,6 +1421,424 @@
     setStatus('已导出多平台 ZIP（4 个尺寸）' + (window.__avoidBad.length ? ` · ⛔ ${window.__avoidBad.join('、')} 文字仍压到人物` : ' · 自检通过'), window.__avoidBad.length ? 'err' : 'ok');
   }
 
+  /* —— v2.1 另存自定义 + 文字/人物效果面板 —— */
+  const B20_FONT_MAP = { heavy: 'black', serif: 'serif', round: 'kuaile', smiley: 'smiley', hand: 'smiley', auto: null };
+
+  function ensureWorkingTemplate() {
+    if (!state.template) state.template = CoverTemplates.clone(currentTemplate());
+    return state.template;
+  }
+
+  function textLayersForTarget(tpl, target) {
+    const layers = tpl.layers || [];
+    if (target === '__all__') {
+      return layers
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => (l.type === 'text' || l.type === 'badge') && l.binding !== 'static');
+    }
+    return layers
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => (l.type === 'text' || l.type === 'badge') && l.binding === target);
+  }
+
+  function hexToRgbArr(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return [17, 17, 17];
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function applyTextFxToStandard(tpl, target) {
+    const rows = textLayersForTarget(tpl, target);
+    if (!rows.length) return 0;
+    const fontKey = ($('#fxFont') && $('#fxFont').value) || 'auto';
+    const F = (CoverRenderer.FONT_STYLES || {})[fontKey];
+    const weight = ($('#fxWeight') && $('#fxWeight').value) || '';
+    const fsEl = $('#fxFontSize');
+    const lhEl = $('#fxLineHeight');
+    const strokeOn = $('#fxStrokeOn') && $('#fxStrokeOn').checked;
+    const shadowOn = $('#fxShadowOn') && $('#fxShadowOn').checked;
+    const hardOn = $('#fxHardOn') && $('#fxHardOn').checked;
+    const glowOn = $('#fxGlowOn') && $('#fxGlowOn').checked;
+    rows.forEach(({ l }) => {
+      if (F && F.fontFamily) {
+        l.fontFamily = F.fontFamily;
+        if (F.fontWeight) l.fontWeight = String(F.fontWeight);
+      }
+      if (weight) l.fontWeight = weight;
+      if (fsEl && fsEl.value !== '') l.fontSize = Number(fsEl.value);
+      if (lhEl && lhEl.value !== '') l.lineHeight = Number(lhEl.value);
+      if (strokeOn) {
+        l.stroke = {
+          color: ($('#fxStrokeColor') && $('#fxStrokeColor').value) || '#111111',
+          ratio: Number(($('#fxStrokeRatio') && $('#fxStrokeRatio').value) || 0.12),
+        };
+      } else if ($('#fxStrokeOn')) {
+        l.stroke = null;
+      }
+      if (shadowOn) {
+        const col = ($('#fxShadowColor') && $('#fxShadowColor').value) || '#000000';
+        l.shadow = {
+          color: col,
+          blur: Number(($('#fxShadowBlur') && $('#fxShadowBlur').value) || 1),
+          dx: Number(($('#fxShadowDx') && $('#fxShadowDx').value) || 0.3),
+          dy: Number(($('#fxShadowDy') && $('#fxShadowDy').value) || 0.5),
+        };
+      } else if ($('#fxShadowOn')) {
+        l.shadow = null;
+      }
+      if (hardOn) {
+        l.hardShadow = {
+          color: ($('#fxHardColor') && $('#fxHardColor').value) || '#111111',
+          dx: Number(($('#fxHardDx') && $('#fxHardDx').value) || 0.6),
+          dy: Number(($('#fxHardDy') && $('#fxHardDy').value) || 0.6),
+        };
+      } else if ($('#fxHardOn')) {
+        l.hardShadow = null;
+      }
+      if (glowOn) {
+        l.glow = { color: ($('#fxGlowColor') && $('#fxGlowColor').value) || '#B6FF00' };
+      } else if ($('#fxGlowOn')) {
+        l.glow = null;
+      }
+    });
+    return rows.length;
+  }
+
+  function applyTextFxToBatch20(tpl, target) {
+    if (!tpl.b20 || !tpl.b20.layers) return 0;
+    const fields = tpl.fields || {};
+    let ids = [];
+    if (target === '__all__') {
+      Object.values(fields).forEach((arr) => {
+        if (Array.isArray(arr)) ids.push(...arr);
+      });
+    } else if (Array.isArray(fields[target])) {
+      ids = fields[target].slice();
+    }
+    ids = [...new Set(ids)];
+    if (!ids.length) return 0;
+    const fontKey = ($('#fxFont') && $('#fxFont').value) || 'auto';
+    const b20Font = B20_FONT_MAP[fontKey];
+    const fsEl = $('#fxFontSize');
+    const strokeOn = $('#fxStrokeOn') && $('#fxStrokeOn').checked;
+    const shadowOn = $('#fxShadowOn') && $('#fxShadowOn').checked;
+    const hardOn = $('#fxHardOn') && $('#fxHardOn').checked;
+    let n = 0;
+    tpl.b20.layers.forEach((e) => {
+      if (!ids.includes(e.id)) return;
+      n += 1;
+      if (b20Font) e.font = b20Font;
+      if (fsEl && fsEl.value !== '') {
+        const v = Number(fsEl.value);
+        if (e.type === 'title' && e.cap_h != null) e.cap_h = Math.max(20, Math.round(v * 12));
+        else if (e.size != null) e.size = Math.max(12, Math.round(v * 8));
+      }
+      if (strokeOn) {
+        const col = hexToRgbArr(($('#fxStrokeColor') && $('#fxStrokeColor').value) || '#111111');
+        const ratio = Number(($('#fxStrokeRatio') && $('#fxStrokeRatio').value) || 0.12);
+        if (e.type === 'title') {
+          const base = e.cap_h || 100;
+          e.stroke = [{ w: Math.max(2, Math.round(base * ratio * 0.45)), color: col }];
+        } else {
+          e.stroke_w = Math.max(1, Math.round(ratio * 30));
+          e.stroke_color = col;
+        }
+      } else if ($('#fxStrokeOn')) {
+        if (e.type === 'title') e.stroke = [];
+        else {
+          e.stroke_w = 0;
+          delete e.stroke_color;
+        }
+      }
+      if (shadowOn || hardOn) {
+        const useHard = hardOn;
+        const col = hexToRgbArr(
+          useHard
+            ? ($('#fxHardColor') && $('#fxHardColor').value) || '#111111'
+            : ($('#fxShadowColor') && $('#fxShadowColor').value) || '#000000'
+        );
+        const dx = Number(
+          useHard
+            ? ($('#fxHardDx') && $('#fxHardDx').value) || 6
+            : ($('#fxShadowDx') && $('#fxShadowDx').value) || 4
+        );
+        const dy = Number(
+          useHard
+            ? ($('#fxHardDy') && $('#fxHardDy').value) || 6
+            : ($('#fxShadowDy') && $('#fxShadowDy').value) || 4
+        );
+        // batch20 uses px offsets; UI numbers for standard are %-ish — scale up when small
+        const sx = Math.abs(dx) <= 4 ? Math.round(dx * 10) : Math.round(dx);
+        const sy = Math.abs(dy) <= 4 ? Math.round(dy * 10) : Math.round(dy);
+        e.shadow = { dx: sx, dy: sy, color: col };
+      } else if ($('#fxShadowOn') || $('#fxHardOn')) {
+        delete e.shadow;
+      }
+    });
+    return n;
+  }
+
+  function syncFxPanels() {
+    const tpl = currentTemplate();
+    const hint = $('#textFxHint');
+    if (!tpl) return;
+    const target = ($('#fxTextTarget') && $('#fxTextTarget').value) || 'title';
+    const rows = textLayersForTarget(tpl, target);
+    const sample = rows[0] && rows[0].l;
+    if (sample) {
+      if ($('#fxFontSize') && sample.fontSize != null) $('#fxFontSize').value = sample.fontSize;
+      if ($('#fxLineHeight')) $('#fxLineHeight').value = sample.lineHeight != null ? sample.lineHeight : 1.3;
+      if ($('#fxWeight') && sample.fontWeight) $('#fxWeight').value = String(sample.fontWeight);
+      if ($('#fxStrokeOn')) $('#fxStrokeOn').checked = !!sample.stroke;
+      if (sample.stroke) {
+        if (sample.stroke.color && sample.stroke.color[0] === '#' && $('#fxStrokeColor')) $('#fxStrokeColor').value = sample.stroke.color.slice(0, 7);
+        if (sample.stroke.ratio != null && $('#fxStrokeRatio')) $('#fxStrokeRatio').value = sample.stroke.ratio;
+      }
+      if ($('#fxShadowOn')) $('#fxShadowOn').checked = !!sample.shadow;
+      if (sample.shadow) {
+        if (sample.shadow.color && sample.shadow.color[0] === '#' && $('#fxShadowColor')) $('#fxShadowColor').value = sample.shadow.color.slice(0, 7);
+        if (sample.shadow.blur != null && $('#fxShadowBlur')) $('#fxShadowBlur').value = sample.shadow.blur;
+        if (sample.shadow.dx != null && $('#fxShadowDx')) $('#fxShadowDx').value = sample.shadow.dx;
+        if (sample.shadow.dy != null && $('#fxShadowDy')) $('#fxShadowDy').value = sample.shadow.dy;
+      }
+      if ($('#fxHardOn')) $('#fxHardOn').checked = !!sample.hardShadow;
+      if (sample.hardShadow) {
+        if (sample.hardShadow.color && sample.hardShadow.color[0] === '#' && $('#fxHardColor')) $('#fxHardColor').value = sample.hardShadow.color.slice(0, 7);
+        if (sample.hardShadow.dx != null && $('#fxHardDx')) $('#fxHardDx').value = sample.hardShadow.dx;
+        if (sample.hardShadow.dy != null && $('#fxHardDy')) $('#fxHardDy').value = sample.hardShadow.dy;
+      }
+      if ($('#fxGlowOn')) $('#fxGlowOn').checked = !!sample.glow;
+      if (sample.glow) {
+        const gc = typeof sample.glow === 'string' ? sample.glow : sample.glow.color;
+        if (gc && gc[0] === '#' && $('#fxGlowColor')) $('#fxGlowColor').value = gc.slice(0, 7);
+      }
+    }
+    const person = (tpl.layers || []).find((l) => l.type === 'image' && (l.binding === 'person' || l.id === 'person'));
+    if (person && person.sticker) {
+      if ($('#fxStickerW') && person.sticker.width != null) $('#fxStickerW').value = person.sticker.width;
+      if (person.sticker.color && person.sticker.color[0] === '#' && $('#fxStickerColor')) $('#fxStickerColor').value = person.sticker.color.slice(0, 7);
+      if ($('#fxStickerShadowOn')) $('#fxStickerShadowOn').checked = !!person.sticker.shadow;
+      if (person.sticker.shadow) {
+        const sc = person.sticker.shadow.color;
+        if (sc && sc[0] === '#' && $('#fxStickerShadowColor')) $('#fxStickerShadowColor').value = sc.slice(0, 7);
+        if (person.sticker.shadow.dx != null && $('#fxStickerDx')) $('#fxStickerDx').value = person.sticker.shadow.dx;
+        if (person.sticker.shadow.dy != null && $('#fxStickerDy')) $('#fxStickerDy').value = person.sticker.shadow.dy;
+      }
+    }
+    if (hint) {
+      if (tpl.engine === 'batch20') {
+        hint.textContent = '当前是 batch20 套装：描边/阴影/字体/字号会写进 b20 图层；行距与发光对该引擎无效。';
+      } else {
+        hint.textContent = '选中模板后，可调标题/副标题/标签/补充的字体、字号、行距、描边、阴影、发光。';
+      }
+    }
+  }
+
+  function applyTextFxFromUI() {
+    const tpl = ensureWorkingTemplate();
+    const target = ($('#fxTextTarget') && $('#fxTextTarget').value) || 'title';
+    let n = 0;
+    if (tpl.engine === 'batch20') n = applyTextFxToBatch20(tpl, target);
+    else n = applyTextFxToStandard(tpl, target);
+    // also keep stub samples in sync for standard-looking fields on batch20
+    if (!n && tpl.engine !== 'batch20') {
+      setStatus('当前目标没有可编辑的文字图层', 'err');
+      return;
+    }
+    scheduleRender();
+    setStatus(n ? `已更新 ${n} 个文字层` : '已应用（无匹配层，已尝试写入）', 'ok');
+  }
+
+  function applyPersonFxFromUI() {
+    const tpl = ensureWorkingTemplate();
+    let n = 0;
+    (tpl.layers || []).forEach((l) => {
+      if (l.type !== 'image') return;
+      if (!(l.binding === 'person' || l.binding === 'person2' || l.binding === 'stickerImage' || l.id === 'person')) return;
+      n += 1;
+      const w = Number(($('#fxStickerW') && $('#fxStickerW').value) || 0);
+      const color = ($('#fxStickerColor') && $('#fxStickerColor').value) || '#FFFFFF';
+      const shadowOn = $('#fxStickerShadowOn') && $('#fxStickerShadowOn').checked;
+      l.sticker = l.sticker || {};
+      l.sticker.width = w;
+      l.sticker.color = color;
+      if (shadowOn) {
+        l.sticker.shadow = {
+          color: ($('#fxStickerShadowColor') && $('#fxStickerShadowColor').value) || '#111111',
+          dx: Number(($('#fxStickerDx') && $('#fxStickerDx').value) || 0.9),
+          dy: Number(($('#fxStickerDy') && $('#fxStickerDy').value) || 0.9),
+        };
+      } else {
+        l.sticker.shadow = null;
+      }
+    });
+    scheduleRender();
+    setStatus(n ? `已更新 ${n} 个人物/贴纸层` : '当前模板没有人物 image 图层（batch20 人物槽不走 sticker）', n ? 'ok' : 'err');
+  }
+
+  function isPersistableUrl(u) {
+    return typeof u === 'string' && /^https?:\/\//i.test(u.trim());
+  }
+
+  function bakeDesignPresets(tpl) {
+    if (!window.CoverRenderer || tpl.engine === 'batch20') return;
+    const fontKey = ($('#designFont') && $('#designFont').value) || 'auto';
+    const fxKey = ($('#designTextFx') && $('#designTextFx').value) || 'auto';
+    const personKey = ($('#designPersonFx') && $('#designPersonFx').value) || 'auto';
+    const F = CoverRenderer.FONT_STYLES || {};
+    const TX = CoverRenderer.TEXT_FX || {};
+    const PX = CoverRenderer.PERSON_FX || {};
+    const f = F[fontKey];
+    const tx = TX[fxKey];
+    const px = PX[personKey];
+    tpl.layers = (tpl.layers || []).map((l) => {
+      let o = { ...l };
+      if (f && f.fontFamily && (o.type === 'text' || o.type === 'badge') && (o.binding === 'title' || /^title/.test(o.id || ''))) {
+        o.fontFamily = f.fontFamily;
+        if (f.fontWeight) o.fontWeight = String(f.fontWeight);
+      }
+      if (tx && fxKey !== 'auto' && o.type === 'text' && (o.binding === 'title' || /^title/.test(o.id || ''))) {
+        for (const k of ['color', 'stroke', 'strokeOuter', 'hardShadow', 'shadow', 'glow', 'extrude', 'fontFamily', 'fontWeight']) {
+          if (k in tx) o[k] = tx[k];
+        }
+      }
+      if (px && personKey !== 'auto' && o.type === 'image' && (o.binding === 'person' || o.binding === 'person2') && px.sticker) {
+        o = { ...o, sticker: JSON.parse(JSON.stringify(px.sticker)) };
+      }
+      return o;
+    });
+  }
+
+  function syncBatch20TextFromFields(tpl, data) {
+    if (!tpl.b20 || !tpl.fields) return;
+    const F = tpl.fields;
+    const put = (binding, raw) => {
+      const ids = F[binding];
+      if (!ids || !ids.length) return;
+      const parts = String(raw == null ? '' : raw).split('/');
+      ids.forEach((id, i) => {
+        const layer = tpl.b20.layers.find((e) => e.id === id);
+        if (layer && layer.text != null) layer.text = (parts[i] != null ? parts[i] : parts[parts.length - 1] || '').trim();
+      });
+    };
+    put('title', data.title);
+    put('subtitle', data.subtitle);
+    put('badge', data.badge);
+    put('tagline', data.tagline);
+  }
+
+  function saveAsCustomTemplate() {
+    readFieldsToData();
+    const base = ensureWorkingTemplate();
+    bakeDesignPresets(base);
+    const tpl = CoverTemplates.clone(base);
+    const samples = {
+      title: state.data.title,
+      subtitle: state.data.subtitle,
+      badge: state.data.badge,
+      tagline: state.data.tagline,
+    };
+    (tpl.layers || []).forEach((l) => {
+      if ((l.type === 'text' || l.type === 'badge') && l.binding && samples[l.binding] != null) {
+        l.sample = samples[l.binding];
+      }
+    });
+    syncBatch20TextFromFields(tpl, samples);
+
+    let warned = false;
+    const scrub = (u) => {
+      if (!u) return '';
+      if (isPersistableUrl(u)) return u.trim();
+      warned = true;
+      return '';
+    };
+    // 不把 blob/dataURL 塞进 localStorage；https 可保留在字段相关图层
+    const img = scrub(state.data.image || state.data.bgImage || ($('#fieldImage') && $('#fieldImage').value) || '');
+    const sticker = scrub(state.data.stickerImage || ($('#fieldSticker') && $('#fieldSticker').value) || '');
+    (tpl.layers || []).forEach((l) => {
+      if (l.type === 'image' && l.binding === 'image' && img) l.sample = img;
+      if (l.type === 'image' && l.binding === 'stickerImage' && sticker) l.sample = sticker;
+      if (l.src && !isPersistableUrl(l.src)) {
+        warned = true;
+        delete l.src;
+      }
+    });
+    // 人物本地图不写入模板
+    if (state.person && state.person.src && !isPersistableUrl(state.person.src)) warned = true;
+
+    const short = String(samples.title || '').replace(/\//g, '').slice(0, 8) || '未命名';
+    const defaultName = `自定义 · ${base.name || '模板'} · ${short}`;
+    const name = window.prompt('自定义模板名称', defaultName);
+    if (name === null) return;
+    tpl.id = 'custom-' + Date.now();
+    tpl.name = (name.trim() || defaultName).slice(0, 80);
+    tpl.custom = true;
+    tpl.group = 'custom';
+    tpl.description = (tpl.description || '') + '（另存自 ' + (base.id || '') + '）';
+
+    try {
+      const probe = JSON.stringify(tpl);
+      if (probe.length > 4_500_000) {
+        setStatus('模板过大，无法写入本机存储（请去掉大图 URL）', 'err');
+        return;
+      }
+      CoverTemplates.addCustom(tpl);
+    } catch (err) {
+      setStatus('保存失败：' + ((err && err.message) || err), 'err');
+      return;
+    }
+    if (warned) {
+      window.alert('本地图片（上传的人物/背景 blob）不会随模板永久保存，刷新后可能丢失。仅 https 图片地址会保留。');
+    }
+    refreshTemplateList();
+    selectTemplate(tpl.id);
+    setStatus('已另存为自定义模板「' + tpl.name + '」', 'ok');
+  }
+
+  function initFxPanels() {
+    const fontSel = $('#fxFont');
+    if (fontSel && CoverRenderer.FONT_STYLES) {
+      fontSel.innerHTML = Object.entries(CoverRenderer.FONT_STYLES)
+        .map(([k, p]) => `<option value="${k}">${p.name || k}</option>`)
+        .join('');
+    }
+    if ($('#btnSaveCustom')) $('#btnSaveCustom').addEventListener('click', saveAsCustomTemplate);
+    if ($('#btnFxTextApply')) $('#btnFxTextApply').addEventListener('click', applyTextFxFromUI);
+    if ($('#fxTextTarget')) $('#fxTextTarget').addEventListener('change', syncFxPanels);
+    // live preview on control change
+    [
+      'fxFont', 'fxWeight', 'fxFontSize', 'fxLineHeight',
+      'fxStrokeOn', 'fxStrokeColor', 'fxStrokeRatio',
+      'fxShadowOn', 'fxShadowColor', 'fxShadowBlur', 'fxShadowDx', 'fxShadowDy',
+      'fxHardOn', 'fxHardColor', 'fxHardDx', 'fxHardDy',
+      'fxGlowOn', 'fxGlowColor',
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', applyTextFxFromUI);
+      if (el.type === 'number' || el.type === 'text') el.addEventListener('input', applyTextFxFromUI);
+    });
+    if ($('#btnFxPersonApply')) $('#btnFxPersonApply').addEventListener('click', applyPersonFxFromUI);
+    [
+      'fxStickerW', 'fxStickerColor', 'fxStickerShadowOn', 'fxStickerShadowColor', 'fxStickerDx', 'fxStickerDy',
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', applyPersonFxFromUI);
+      if (el.type === 'number') el.addEventListener('input', applyPersonFxFromUI);
+    });
+    if ($('#btnFxPersonReset')) {
+      $('#btnFxPersonReset').addEventListener('click', () => {
+        state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
+        if ($('#personScale')) $('#personScale').value = 1;
+        scheduleRender();
+        setStatus('已复位人物变换', 'ok');
+      });
+    }
+    syncFxPanels();
+  }
+
   function initV15() {
     initScene();
     initPerson2();
@@ -1413,6 +1855,9 @@
       $('#occludeToggle').addEventListener('change', scheduleRender);
       if ($('#avoidToggle')) $('#avoidToggle').addEventListener('change', () => { syncPersonMode(); scheduleRender(); });
       initDesignUI();
+      initFxPanels();
+    } else if (typeof initFxPanels === "function") {
+      initFxPanels();
     }
   }
 
