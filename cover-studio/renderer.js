@@ -975,12 +975,43 @@ window.CoverRenderer = (function () {
     }
     if (fit === 'contain') {
       const t = layer._transform || { dx: 0, dy: 0, scale: 1 };
-      const scale = Math.min(w / iw, h / ih) * (t.scale || 1) * (layer.scale || 1);
+      const isPerson = layer.binding === 'person' || layer.binding === 'person2';
+      // v2.4：人物按不透明内容框落位（personBox / alpha bbox），底部对齐并尽量撑满槽高
+      let cx0 = 0, cy0 = 0, cx1 = 1, cy1 = 1;
+      const cb = layer._contentBox;
+      if (isPerson && cb && cb.w > 0.05 && cb.h > 0.05) {
+        cx0 = cb.x; cy0 = cb.y; cx1 = cb.x + cb.w; cy1 = cb.y + cb.h;
+      } else if (isPerson) {
+        const g = alphaGrid(img);
+        if (g && g.bb) { cx0 = g.bb.x0; cy0 = g.bb.y0; cx1 = g.bb.x1; cy1 = g.bb.y1; }
+      }
+      const cw = Math.max(1, (cx1 - cx0) * iw), ch = Math.max(1, (cy1 - cy0) * ih);
+      const userSc = (t.scale || 1) * (layer.scale || 1);
+      let scale = Math.min(w / cw, h / ch) * userSc;
+      if (isPerson) {
+        // 优先接近槽高 90%，但不超过槽宽
+        const fillH = Math.min(w / cw, (h * 0.9) / ch) * userSc;
+        scale = Math.min(w / cw, Math.max(scale, fillH));
+      }
       const dw = iw * scale, dh = ih * scale;
-      let dx = x + (w - dw) / 2;
-      if (layer.halign === 'left') dx = x; else if (layer.halign === 'right') dx = x + w - dw;
+      const contentCx = ((cx0 + cx1) / 2) * dw;
+      const contentBottom = cy1 * dh;
+      const contentTop = cy0 * dh;
+      let dx = x + w / 2 - contentCx;
+      if (!isPerson) {
+        dx = x + (w - dw) / 2;
+        if (layer.halign === 'left') dx = x; else if (layer.halign === 'right') dx = x + w - dw;
+      }
       dx += pct(t.dx || 0, W);
-      const dy = (layer.align === 'bottom' ? y + h - dh : layer.align === 'top' ? y : y + (h - dh) / 2) + pct(t.dy || 0, H);
+      let dy;
+      if (isPerson || layer.align === 'bottom') {
+        dy = y + h - contentBottom + pct(t.dy || 0, H);
+        if (dy + contentTop < y - 1) dy = y - contentTop + pct(t.dy || 0, H);
+      } else if (layer.align === 'top') {
+        dy = y - contentTop + pct(t.dy || 0, H);
+      } else {
+        dy = y + (h - dh) / 2 + pct(t.dy || 0, H);
+      }
       return { dx, dy, dw, dh };
     }
     return { dx: x, dy: y, dw: w, dh: h };
@@ -1418,7 +1449,7 @@ window.CoverRenderer = (function () {
     const lineX = (lw) => (align === 'center' ? x + (w - lw) / 2 : align === 'right' ? x + w - lw : x);
     const widths = lines.map((l) => lineWidth(ctx, l));
     const maxLineW = Math.max(0, ...widths);
-    if (ctx._textBoxes && (ctx._measure || !layer.ignoreFace)) ctx._textBoxes.push({ id: layer.id, x: lineX(maxLineW), y: startY, w: maxLineW, h: totalH });
+    if (ctx._textBoxes && (ctx._measure || !layer.ignoreFace)) ctx._textBoxes.push({ id: layer.id, binding: layer.binding || null, kind: (layer.binding === 'badge' ? 'badge' : (layer.type === 'badge' ? 'badge' : 'text')), x: lineX(maxLineW), y: startY, w: maxLineW, h: totalH });
     if (ctx._measure) return;
     if (layer.arc) { drawArcText(ctx, layer, segs, fontSize, x + w / 2, baseOf(0), minSide); return; }
 
@@ -1553,7 +1584,7 @@ window.CoverRenderer = (function () {
     if (layer.square) { const s = Math.min(w, h); x += (w - s) / 2; y += (h - s) / 2; w = s; h = s; }
     const r = pct(layer.radius != null ? layer.radius : 1, minSide);
     let fontSize = pct(layer.fontSize || 2.5, minSide);
-    if (ctx._textBoxes && ctx._measure) ctx._textBoxes.push({ id: layer.id, kind: 'badge', x, y, w, h });
+    if (ctx._textBoxes) ctx._textBoxes.push({ id: layer.id, kind: 'badge', binding: layer.binding || null, x, y, w, h });
 
     withTransform(ctx, layer, x, y, w, h, () => {
       const shapeLayer = { id: layer.id, shape: layer.shape || 'rect', radius: layer.radius != null ? layer.radius : 1, points: layer.points, inner: layer.inner, tail: layer.tail };
@@ -1617,10 +1648,13 @@ window.CoverRenderer = (function () {
     let found = false;
     layers = layers.filter((l) => !(l.needPerson2 && !data.person2)).map((l) => (l.withP2 && data.person2 ? { ...l, ...l.withP2 } : l));
     const out = layers.map((l) => {
-      if (l.binding === 'person2') return { ...l, fit: l.fit || 'contain', align: l.align || 'bottom', _transform: data.person2 ? null : tf };
+      // personBox 相对「原图像素」；抠图后的图已裁成内容框，不能再套 personBox
+      const cut = !!(data.personPhoto && data.person && data.person !== data.personPhoto);
+      const cbox = cut ? null : (data.personBox || l._contentBox || null);
+      if (l.binding === 'person2') return { ...l, fit: l.fit || 'contain', align: l.align || 'bottom', _transform: data.person2 ? null : tf, _contentBox: cbox };
       if (l.binding !== 'person') return l;
       found = true;
-      return { ...l, fit: l.fit || 'contain', align: l.align || 'bottom', _transform: tf };
+      return { ...l, fit: l.fit || 'contain', align: l.align || 'bottom', _transform: tf, _contentBox: cbox };
     });
     if (!data.person) {
       // 无人物：去掉人物层；若模板声明了 noPerson 替代层则显示
@@ -1885,6 +1919,21 @@ window.CoverRenderer = (function () {
         if (cs0.bad === 0 && cs0.face === 0) return { tf: tf0, layers: nl0, moved: true, score: cs0 };
       }
     }
+    // v2.4：默认锁定人物槽（lockPersonSlot），只继续缩字/挪字，不再搜索挪人
+    if (data.lockPersonSlot !== false) {
+      for (const ts of [0.7, 0.62, 0.55]) {
+        const lay = scaleText(layers, ts);
+        const boxesT = measureBoxes(lay, W, H, data);
+        const csT = conflictScore(overlapOf(boxesT, masks0, W, H));
+        if (csT.bad === 0 && csT.face === 0) return { tf: tf0, layers: lay, moved: true, score: csT };
+        const nl = relocate(lay, overlapOf(boxesT, masks0, W, H), masks0, W, H, data);
+        if (nl) {
+          const csN = conflictScore(overlapOf(measureBoxes(nl, W, H, data), masks0, W, H));
+          if (csN.bad === 0 && csN.face === 0) return { tf: tf0, layers: nl, moved: true, score: csN };
+        }
+      }
+      return { tf: tf0, layers, moved: false, score: base };
+    }
     const scales = [1, 0.94, 0.88, 0.82, 0.76].filter((v) => v >= minSc - 1e-6);
     const dxs = [0, -6, 6, -12, 12, -18, 18];
     const dys = [0, 4, 8, 12, -4, -8, -12, -18];
@@ -2122,6 +2171,34 @@ window.CoverRenderer = (function () {
     }
     if (DESIGN.grain) { try { drawGrain(ctx, W, H, DESIGN.grain); } catch (e) { /* ignore */ } }
     canvas._design = { scrims: ctx._scrims, decoHidden: layers.filter((l) => l._decoHidden).map((l) => l.id) };
+    // v2.4：点击命中区（后绘在上，命中时从后往前找）
+    const hits = [];
+    for (const layer of layers) {
+      if (layer.visible === false) continue;
+      if (layer.type === 'image' && (layer.binding === 'person' || layer.binding === 'person2' || layer.binding === 'stickerImage' || layer.binding === 'image')) {
+        const im = imageUrls[layer.id];
+        if (!im && layer.binding !== 'person') continue;
+        const box = im ? imageRect(layer, W, H, im) : { dx: pct(layer.x, W), dy: pct(layer.y, H), dw: pct(layer.w, W), dh: pct(layer.h, H) };
+        hits.push({ id: layer.id, binding: layer.binding || null, type: layer.type, kind: layer.binding === 'person' || layer.binding === 'person2' ? 'person' : 'image', x: box.dx, y: box.dy, w: box.dw, h: box.dh });
+      }
+    }
+    for (const b of (ctx._textBoxes || [])) {
+      const layer = layers.find((l) => l.id === b.id) || {};
+      hits.push({ id: b.id, binding: layer.binding || b.binding || null, type: layer.type || (b.kind === 'badge' ? 'badge' : 'text'), kind: b.kind || 'text', x: b.x, y: b.y, w: b.w, h: b.h });
+    }
+    canvas._hitLayers = hits;
+    // 选中描边
+    if (data.selectedLayerId) {
+      const sel = hits.filter((h) => h.id === data.selectedLayerId).pop();
+      if (sel) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(224,122,61,0.95)';
+        ctx.lineWidth = Math.max(2, Math.min(W, H) * 0.004);
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(sel.x - 3, sel.y - 3, sel.w + 6, sel.h + 6);
+        ctx.restore();
+      }
+    }
     // 脸部安全区：估计脸部框，统计文字覆盖比例（仅提示）
     try {
       const face = estimateFace(photoMode ? cutImg : null, data.personBox, rc, W, H, stickerRect);
@@ -2219,5 +2296,17 @@ window.CoverRenderer = (function () {
     ctx.restore();
   }
 
-  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.3", planAvoid, getLastAvoid: () => lastAvoid };
+  function hitTest(canvas, clientX, clientY) {
+    const hits = canvas && canvas._hitLayers;
+    if (!hits || !hits.length) return null;
+    const r = canvas.getBoundingClientRect();
+    const x = ((clientX - r.left) / r.width) * canvas.width;
+    const y = ((clientY - r.top) / r.height) * canvas.height;
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const h = hits[i];
+      if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) return h;
+    }
+    return null;
+  }
+  return { render, toPngBlob, loadImage, clearImageCache, resolveImageUrl, aspectClass, drawSafeGuides, drawFaceGuide, hitTest, PALETTES, FONT_STYLES, DESIGN_DEFAULT, applyPalette, TEXT_FX, PERSON_FX, VERSION: "2.4", planAvoid, getLastAvoid: () => lastAvoid };
 })();

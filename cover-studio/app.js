@@ -36,6 +36,7 @@
     batchRows: [],
     batchActive: -1,
     renderToken: 0,
+    selectedLayerId: null,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -323,7 +324,8 @@
     box.innerHTML = (t.layers || [])
       .map((layer, i) => {
         const checked = layer.visible !== false ? 'checked' : '';
-        return `<div class="layer-row">
+        const sel = state.selectedLayerId === layer.id ? ' selected' : '';
+        return `<div class="layer-row${sel}" data-layer-id="${escapeHtml(layer.id)}">
           <input type="checkbox" data-idx="${i}" ${checked} aria-label="显示 ${escapeHtml(layer.id)}" />
           <span class="layer-type">${escapeHtml(layer.type)}</span>
           <span class="layer-id">${escapeHtml(layer.id)}${layer.binding ? ' · ' + escapeHtml(layer.binding) : ''}</span>
@@ -337,6 +339,12 @@
         if (!state.template) state.template = CoverTemplates.clone(currentTemplate());
         state.template.layers[idx].visible = cb.checked;
         scheduleRender();
+      });
+    });
+    box.querySelectorAll('.layer-row').forEach((row) => {
+      row.addEventListener('click', (e) => {
+        if (e.target && e.target.matches('input')) return;
+        selectPreviewLayer({ id: row.dataset.layerId, binding: null, kind: 'layer' }, { fromList: true });
       });
     });
   }
@@ -1066,7 +1074,7 @@
     state.data.person = url;
     if (url !== p.src) {
       const info = CoverSegment.info();
-      personHint(`已抠图 · ${info ? info.name : ''}（拖动预览可调整位置，滚轮缩放）`);
+      personHint(`已抠图 · ${info ? info.name : ''}（默认落模板槽；可点选/拖动微调，或「重置落位」）`);
     } else if (!$('#personCutout').checked) {
       personHint('已使用原图（抠图已关闭）');
     }
@@ -1115,8 +1123,8 @@
     $('#personFeather').addEventListener('change', refreshPerson);
     $('#personScale').addEventListener('input', (e) => setPersonScale(Number(e.target.value)));
     $('#personReset').addEventListener('click', () => {
-      state.data.personTransform = { dx: 0, dy: 0, scale: 1 };
-      $('#personScale').value = 1;
+      resetPersonPlacement('button');
+      personHint('已重置落位到模板人物槽（可再拖动微调）');
       scheduleRender();
     });
     $('#personClear').addEventListener('click', () => {
@@ -1136,7 +1144,7 @@
       setStatus(`已载入 ${files.length} 张人物照片（按文件名顺序对应各行）`, 'ok');
     });
 
-    // 预览拖动 / 滚轮缩放
+    // v2.4：预览点选图层 + 人物拖动（区分点击/拖动）
     const cv = $('#previewCanvas');
     let drag = null;
     cv.addEventListener('pointerdown', (e) => {
@@ -1148,34 +1156,109 @@
         cv.setPointerCapture(e.pointerId);
         return;
       }
-      if (!state.data.person) return;
-      const t = state.data.personTransform;
-      drag = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, dx: t.dx, dy: t.dy };
+      const hit = (window.CoverRenderer && CoverRenderer.hitTest) ? CoverRenderer.hitTest(cv, e.clientX, e.clientY) : null;
+      drag = {
+        x: e.clientX, y: e.clientY, w: r.width, h: r.height,
+        moved: false, hit,
+        person: !!(hit && hit.kind === 'person' && state.data.person),
+        dx: state.data.personTransform.dx, dy: state.data.personTransform.dy,
+      };
       cv.setPointerCapture(e.pointerId);
     });
     cv.addEventListener('pointermove', (e) => {
-      cv.classList.toggle('person-drag', !!state.data.person);
+      const over = (window.CoverRenderer && CoverRenderer.hitTest) ? CoverRenderer.hitTest(cv, e.clientX, e.clientY) : null;
+      cv.classList.toggle('person-drag', !!(over && over.kind === 'person' && state.data.person));
+      cv.classList.toggle('layer-pick', !!(over && over.kind !== 'person'));
       if (!drag) return;
+      const dist = Math.hypot(e.clientX - drag.x, e.clientY - drag.y);
+      if (dist > 4) drag.moved = true;
       if (drag.scene) {
-        // 向右拖 → 看到图的更左侧（焦点减小）
         state.scene.fx = Math.max(0, Math.min(100, drag.fx - ((e.clientX - drag.x) / drag.w) * 150));
         state.scene.fy = Math.max(0, Math.min(100, drag.fy - ((e.clientY - drag.y) / drag.h) * 150));
         scheduleRender();
         return;
       }
-      const t = state.data.personTransform;
-      t.dx = drag.dx + ((e.clientX - drag.x) / drag.w) * 100;
-      t.dy = drag.dy + ((e.clientY - drag.y) / drag.h) * 100;
-      scheduleRender();
+      if (drag.person && drag.moved) {
+        const t = state.data.personTransform;
+        t.dx = drag.dx + ((e.clientX - drag.x) / drag.w) * 100;
+        t.dy = drag.dy + ((e.clientY - drag.y) / drag.h) * 100;
+        scheduleRender();
+      }
     });
-    const end = () => { drag = null; };
+    const end = (e) => {
+      if (drag && !drag.scene && !drag.moved) {
+        selectPreviewLayer(drag.hit || null);
+      } else if (drag && drag.person && drag.moved) {
+        selectPreviewLayer(drag.hit || { kind: 'person', binding: 'person' }, { quiet: true });
+      }
+      drag = null;
+    };
     cv.addEventListener('pointerup', end);
     cv.addEventListener('pointercancel', end);
     cv.addEventListener('wheel', (e) => {
       if (!state.data.person) return;
+      const over = (window.CoverRenderer && CoverRenderer.hitTest) ? CoverRenderer.hitTest(cv, e.clientX, e.clientY) : null;
+      if (over && over.kind && over.kind !== 'person') return;
       e.preventDefault();
       setPersonScale(state.data.personTransform.scale * (e.deltaY < 0 ? 1.05 : 0.95));
     }, { passive: false });
+  }
+
+  function fieldElForBinding(binding, kind) {
+    const map = {
+      title: '#fieldTitle', subtitle: '#fieldSubtitle', badge: '#fieldBadge', tagline: '#fieldTagline',
+      stickerImage: '#fieldSticker', image: '#fieldImage',
+    };
+    if (binding && map[binding]) return $(map[binding]);
+    if (kind === 'badge' || kind === 'tag') return $('#fieldBadge');
+    if (kind === 'text') return $('#fieldTitle');
+    return null;
+  }
+
+  function selectPreviewLayer(hit, opts) {
+    opts = opts || {};
+    $$('.field.field-selected, .layer-row.selected').forEach((el) => el.classList.remove('field-selected', 'selected'));
+    if (!hit) {
+      state.selectedLayerId = null;
+      if (!opts.quiet) scheduleRender();
+      return;
+    }
+    state.selectedLayerId = hit.id || null;
+    const binding = hit.binding || null;
+    const kind = hit.kind || hit.type || '';
+    if (kind === 'person' || binding === 'person' || binding === 'person2') {
+      const pf = document.querySelector('.person-field');
+      if (pf) {
+        pf.classList.add('field-selected');
+        if (!opts.quiet) {
+          pf.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          personHint('已选中人物层：可拖动预览调整位置，滚轮缩放，或点「重置落位」');
+        }
+      }
+    } else {
+      const input = fieldElForBinding(binding, kind);
+      if (input) {
+        const wrap = input.closest('.field') || input;
+        wrap.classList.add('field-selected');
+        if (!opts.quiet) {
+          wrap.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          try { input.focus({ preventScroll: true }); input.select && input.select(); } catch (e) {}
+        }
+      }
+      // 贴纸图：无 URL 时仍高亮贴纸字段
+      if (binding === 'stickerImage' || kind === 'image') {
+        const st = $('#fieldSticker');
+        if (st) {
+          const wrap = st.closest('.field') || st;
+          wrap.classList.add('field-selected');
+        }
+      }
+    }
+    // 图层列表高亮
+    const row = document.querySelector(`.layer-row[data-layer-id="${CSS && CSS.escape ? CSS.escape(hit.id || '') : (hit.id || '')}"]`);
+    if (row) row.classList.add('selected');
+    if (!opts.fromList && !opts.quiet) scheduleRender();
+    else if (opts.fromList) scheduleRender();
   }
 
   function escapeHtml(s) {
@@ -1241,11 +1324,18 @@
       personMode: personModeFor(template),
       occlude: $('#occludeToggle') ? $('#occludeToggle').checked : false,
       avoidPerson: $('#avoidToggle') ? $('#avoidToggle').checked : true,
+      // v2.4：避让优先缩/挪字，默认不挪人物槽
+      lockPersonSlot: true,
       personBox: box,
     };
   }
   function renderData(template) {
-    return { ...state.data, scene: sceneFor(template), ...photoExtras(template, state.data.person, state.person.src) };
+    return {
+      ...state.data,
+      scene: sceneFor(template),
+      ...photoExtras(template, state.data.person, state.person.src),
+      selectedLayerId: state.selectedLayerId || null,
+    };
   }
   function syncPersonMode() {
     const t = currentTemplate();

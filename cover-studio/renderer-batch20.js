@@ -117,16 +117,22 @@ window.CoverBatch20 = (function () {
     const [x0, y0, x1, y1] = e.box, bw = x1 - x0, bh = y1 - y0; const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     const s = Math.max(bw / iw, bh / ih) * (e.zoom || 1); const sw = Math.round(iw * s), sh = Math.round(ih * s);
     let [ax, ay] = e.anchor || [0.5, 0];
-    // v2.2：上传图按人物框对焦，使头/身落在模板人物槽内，避免宽高比不同导致跑偏
-    if (e._uploaded && e._pbox && e._pbox.w > 0.05 && e._pbox.h > 0.05) {
-      const pb = e._pbox;
-      const fx = pb.x + pb.w * 0.5;
-      const fy = Math.min(0.92, Math.max(0.05, pb.y + pb.h * 0.18));
-      // 让原图焦点落到槽的水平中心、垂直偏上（贴近模板 anchor 顶对齐意图）
-      const targetX = 0.5, targetY = Math.min(0.35, Math.max(0.08, ay || 0.12));
-      if (sw > bw) ax = Math.min(1, Math.max(0, (fx * sw - targetX * bw) / (sw - bw)));
+    // v2.4：上传图对齐到模板默认头框（若有），否则对齐人物框；cover 焦点落在目标头中心
+    if (e._uploaded) {
+      let fx = 0.5, fy = 0.22;
+      if (e._pbox && e._pbox.w > 0.05 && e._pbox.h > 0.05) {
+        fx = e._pbox.x + e._pbox.w * 0.5;
+        fy = Math.min(0.85, Math.max(0.06, e._pbox.y + e._pbox.h * 0.2));
+      }
+      let tx = 0.5, ty = Math.min(0.28, Math.max(0.1, (ay == null ? 0.15 : ay) + 0.12));
+      if (e._targetHead && e._targetHead.length >= 4) {
+        const th = e._targetHead;
+        tx = (th[0] + th[2]) / 2;
+        ty = th[1] + (th[3] - th[1]) * 0.35;
+      }
+      if (sw > bw) ax = Math.min(1, Math.max(0, (fx * sw - tx * bw) / (sw - bw)));
       else ax = 0.5;
-      if (sh > bh) ay = Math.min(1, Math.max(0, (fy * sh - targetY * bh) / (sh - bh)));
+      if (sh > bh) ay = Math.min(1, Math.max(0, (fy * sh - ty * bh) / (sh - bh)));
       else ay = 0;
     }
     const ox = Math.round((sw - bw) * ax), oy = Math.round((sh - bh) * ay);
@@ -213,14 +219,15 @@ window.CoverBatch20 = (function () {
     const up = data.personPhoto || data.person || '';
     T.layers.forEach((e) => { if (e.type === 'person') { const P = (window.CoverBatch20People || {})[e.id] || {};
       if (up) {
-        e._src = up;
+        // 优先用原图做 cover 对焦（与模板样例一致）；personBox 来自抠图
+        e._src = data.personPhoto || up;
         e._heads = data.personHeads || null;
-        // personBox 可能挂在抠图 URL 上；原图上传时用 data.person（抠图）查 box
         let pb = data.personBox || null;
         if (!pb && window.CoverSegment && CoverSegment.box) {
           pb = CoverSegment.box(data.person) || CoverSegment.box(up) || null;
         }
         e._pbox = pb;
+        e._targetHead = (P.heads && P.heads[0]) || null;
         e._uploaded = true;
       } else { e._src = P.src; e._heads = P.heads; } } });
     return T;
@@ -238,7 +245,46 @@ window.CoverBatch20 = (function () {
     const lay = drawAll(ctx, T2, imgs, null, W, H); lay._safe = log; lay.uploadedPerson = T.layers.some((e) => e._uploaded);
     const tw = (size && size.width) || W, th = (size && size.height) || H; canvas.width = tw; canvas.height = th; const out = canvas.getContext('2d');
     const s = Math.max(tw / W, th / H); out.drawImage(cv, (tw - W * s) / 2, (th - H * s) / 2, W * s, H * s);
-    canvas._b20 = lay; canvas._design = { scrims: 0, decoHidden: [] }; return lay;
+    canvas._b20 = lay; canvas._design = { scrims: 0, decoHidden: [] };
+    // v2.4 命中区：按绘制顺序，文字/标签用 bbox；人物用槽框；命中从后往前
+    const ox = (tw - W * s) / 2, oy = (th - H * s) / 2;
+    const hits = [];
+    const fieldOf = (id, typ) => {
+      const F = template.fields || {};
+      for (const k of Object.keys(F)) if ((F[k] || []).includes(id)) return k;
+      if (typ === 'title') return 'title';
+      if (typ === 'tag') return 'badge';
+      if (typ === 'text') return 'subtitle';
+      return null;
+    };
+    for (const e of T2.layers) {
+      if (e.type === 'person') {
+        const [x0, y0, x1, y1] = e.box;
+        hits.push({ id: e.id, binding: 'person', type: 'person', kind: 'person', x: ox + x0 * s, y: oy + y0 * s, w: (x1 - x0) * s, h: (y1 - y0) * s });
+      }
+    }
+    const els = lay.elements || {};
+    Object.keys(els).forEach((id) => {
+      const v = els[id]; if (!v || !v.bbox) return;
+      const [x0, y0, x1, y1] = v.bbox;
+      const layer = T2.layers.find((L) => L.id === id) || {};
+      const typ = layer.type || v.type || 'text';
+      const binding = fieldOf(id, typ);
+      hits.push({ id, binding, type: typ, kind: typ === 'tag' ? 'badge' : (typ === 'title' ? 'text' : typ), x: ox + x0 * s, y: oy + y0 * s, w: (x1 - x0) * s, h: (y1 - y0) * s });
+    });
+    canvas._hitLayers = hits;
+    if (data && data.selectedLayerId) {
+      const sel = hits.filter((h) => h.id === data.selectedLayerId).pop();
+      if (sel) {
+        out.save();
+        out.strokeStyle = 'rgba(224,122,61,0.95)';
+        out.lineWidth = Math.max(2, Math.min(tw, th) * 0.004);
+        out.setLineDash([6, 4]);
+        out.strokeRect(sel.x - 3, sel.y - 3, sel.w + 6, sel.h + 6);
+        out.restore();
+      }
+    }
+    return lay;
   }
-  return { render, bind, VERSION: '2.3' };
+  return { render, bind, VERSION: '2.4' };
 })();

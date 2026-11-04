@@ -9,8 +9,8 @@
     可商用。用户后续可自行上传商用字体文件并在模板 fontFamily 中引用。
     请勿使用未获授权的字体文件。
   -->
-  <link rel="stylesheet" href="vendor/fonts/fonts.css?v=2.3" />
-  <link rel="stylesheet" href="style.css?v=2.3" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css?v=2.4" />
+  <link rel="stylesheet" href="style.css?v=2.4" />
 </head>
 <body>
   <div id="app">
@@ -154,7 +154,7 @@
               <label class="inline"><input type="checkbox" id="personCutout" checked /> 抠图</label>
               <label class="inline">收边 <input type="range" id="personFeather" min="0" max="6" step="1" value="1" /></label>
               <label class="inline">缩放 <input type="range" id="personScale" min="0.4" max="2" step="0.05" value="1" /></label>
-              <button type="button" class="btn btn-sm" id="personReset">复位</button>
+              <button type="button" class="btn btn-sm" id="personReset">重置落位</button>
               <button type="button" class="btn btn-sm" id="personClear">移除</button>
             </div>
             <div class="person-opts" id="personModeRow">
@@ -163,7 +163,7 @@
               <label class="inline" title="v1.7 起默认关闭；仅在关闭「文字避让人物」时可用"><input type="checkbox" id="occludeToggle" /> 头部遮挡标题（旧版，字会被头挡住）</label>
             </div>
             <p class="compliance-warn" id="faceWarn" hidden></p>
-            <p class="hint" id="personHint">上传人像后自动去背景（本地处理，不上传）。可在预览图上拖动人物、滚轮缩放。</p>
+            <p class="hint" id="personHint">上传人像后自动去背景（本地处理，不上传）。默认落在模板人物槽；点击预览可选中文字/标签/贴纸/人物并编辑。</p>
             <label for="person2File" class="hint" style="display:block;margin-top:6px;">第二人物（可选，用于「对比VS」左侧；不传则左右用同一人）</label>
             <input type="file" id="person2File" accept="image/*" />
             <button type="button" class="btn btn-sm" id="person2Clear">移除第二人物</button>
@@ -308,23 +308,23 @@
   </div>
 
   <!-- JSZip CDN -->
-  <script src="vendor/jszip/jszip.min.js?v=2.3"></script>
+  <script src="vendor/jszip/jszip.min.js?v=2.4"></script>
   <script>window.JSZip || document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>')</script>
-  <script src="assets/backgrounds/index.js?v=2.3"></script>
-  <script src="compliance.js?v=2.3"></script>
-  <script src="sizes.js?v=2.3"></script>
-  <script src="templates.js?v=2.3"></script>
-  <script src="templates-ref.js?v=2.3"></script>
-  <script src="templates-replica.js?v=2.3"></script>
-  <script src="templates-replica-a.js?v=2.3"></script>
-  <script src="templates-replica-b.js?v=2.3"></script>
-  <script src="templates-square.js?v=2.3"></script>
-  <script src="templates-batch20.js?v=2.3"></script>
-  <script src="vendor/icons/tabler-subset.js?v=2.3"></script>
-  <script src="renderer.js?v=2.3"></script>
-  <script src="renderer-batch20.js?v=2.3"></script>
-  <script src="generator.js?v=2.3"></script>
-  <script src="segment.js?v=2.3"></script>
-  <script src="app.js?v=2.3"></script>
+  <script src="assets/backgrounds/index.js?v=2.4"></script>
+  <script src="compliance.js?v=2.4"></script>
+  <script src="sizes.js?v=2.4"></script>
+  <script src="templates.js?v=2.4"></script>
+  <script src="templates-ref.js?v=2.4"></script>
+  <script src="templates-replica.js?v=2.4"></script>
+  <script src="templates-replica-a.js?v=2.4"></script>
+  <script src="templates-replica-b.js?v=2.4"></script>
+  <script src="templates-square.js?v=2.4"></script>
+  <script src="templates-batch20.js?v=2.4"></script>
+  <script src="vendor/icons/tabler-subset.js?v=2.4"></script>
+  <script src="renderer.js?v=2.4"></script>
+  <script src="renderer-batch20.js?v=2.4"></script>
+  <script src="generator.js?v=2.4"></script>
+  <script src="segment.js?v=2.4"></script>
+  <script src="app.js?v=2.4"></script>
 </body>
 </html>
