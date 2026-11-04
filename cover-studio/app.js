@@ -1871,57 +1871,15 @@
 
   /* —— 启动 —— */
   function syncPreviewStickyLayout() {
-    const el = $('#previewSticky');
-    const slot = $('#previewStickySlot');
-    if (!el) return;
-    const fixed = window.matchMedia && window.matchMedia('(max-width: 1100px)').matches;
-    el.classList.toggle('is-stuck', fixed || el.classList.contains('is-stuck'));
-    if (slot) {
-      if (fixed) {
-        const h = Math.ceil(el.getBoundingClientRect().height);
-        document.documentElement.style.setProperty('--preview-sticky-h', h + 'px');
-        slot.style.height = h + 'px';
-      } else {
-        slot.style.height = '0px';
-      }
-    }
+    /* v2.3：布局改为预览固定 + .editor-scroll 内滚，无需测量 sticky */
   }
 
   function initPreviewSticky() {
-    const el = $('#previewSticky');
-    if (!el) return;
-    syncPreviewStickyLayout();
-    window.addEventListener('resize', syncPreviewStickyLayout);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncPreviewStickyLayout);
-    // 桌面：栏内滚动时加阴影
-    if (typeof IntersectionObserver !== 'undefined') {
-      let sentinel = el.previousElementSibling;
-      if (!sentinel || !sentinel.classList || !sentinel.classList.contains('preview-sticky-sentinel')) {
-        sentinel = document.createElement('div');
-        sentinel.className = 'preview-sticky-sentinel';
-        sentinel.setAttribute('aria-hidden', 'true');
-        sentinel.style.cssText = 'height:1px;margin:0;padding:0;pointer-events:none;';
-        el.parentNode.insertBefore(sentinel, el);
-      }
-      const io = new IntersectionObserver(
-        ([e]) => {
-          if (window.matchMedia && window.matchMedia('(max-width: 1100px)').matches) return;
-          el.classList.toggle('is-stuck', e && e.intersectionRatio < 1);
-        },
-        { threshold: [1], root: el.closest('.preview-panel') || null }
-      );
-      io.observe(sentinel);
-    }
-    // 渲染后同步窄屏占位高度
-    const _sr = scheduleRender;
-    // 不包裹 scheduleRender；在 doRender 成功后轻量同步
-    const orig = window.__csStickyHooked;
-    if (!orig) {
-      window.__csStickyHooked = true;
-      const mo = new MutationObserver(() => syncPreviewStickyLayout());
-      mo.observe(el, { attributes: true, childList: true, subtree: true });
-    }
+    // 保留函数名以免旧调用报错；确保参数区可滚
+    const sc = document.getElementById('editorScroll');
+    if (sc) sc.setAttribute('tabindex', '-1');
   }
+
 
   function boot() {
     initSizeSelect();

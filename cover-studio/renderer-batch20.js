@@ -240,5 +240,5 @@ window.CoverBatch20 = (function () {
     const s = Math.max(tw / W, th / H); out.drawImage(cv, (tw - W * s) / 2, (th - H * s) / 2, W * s, H * s);
     canvas._b20 = lay; canvas._design = { scrims: 0, decoHidden: [] }; return lay;
   }
-  return { render, bind, VERSION: '2.2' };
+  return { render, bind, VERSION: '2.3' };
 })();
